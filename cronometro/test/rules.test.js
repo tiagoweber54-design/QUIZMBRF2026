@@ -55,9 +55,10 @@ function randomCommand(rand) {
   const target = pick(['timer', 'stopwatch']);
   const id = 'p' + String(1 + Math.floor(rand() * 25)).padStart(2, '0');
   switch (pick(['start', 'start', 'pause', 'reset', 'restart', 'set', 'adjust', 'adjust', 'lap', 'lap', 'mode', 'title', 'message', 'settings',
-    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult'])) {
+    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult', 'alert', 'alert'])) {
     case 'select': return { type: 'select', id, ms: (1 + Math.floor(rand() * 15)) * 60000, force: rand() < 0.5 };
     case 'finish': return { type: 'finish' };
+    case 'alert': return { type: 'alert', kind: pick(['half', 'last']), text: pick(['Metade do tempo: faltam 4 minutos', 'Falta 1 minuto']) };
     case 'clearResult': return { type: 'clearResult', id: rand() < 0.1 ? '*' : id };
     case 'start': return { type: 'start', target };
     case 'pause': return { type: 'pause', target };
@@ -124,6 +125,19 @@ test('a day of presentations, with points lost, is accepted', { skip }, async ()
   assert.ok(Object.values(state.agenda.results).some((r) => r.points > 0));
 });
 
+test('the automatic messages (half time, last minute) are accepted', { skip }, async () => {
+  const who = { id: 'op', name: 'iPhone' };
+  let state = core.apply(core.initialState(), { type: 'select', id: 'p09', ms: 12 * 60000 }, 1700000000000, who);
+  state = core.apply(state, { type: 'start', target: 'timer' }, 1700000000000, who);
+  state = core.apply(state, { type: 'alert', kind: 'half', text: 'Metade do tempo: faltam 6 minutos' }, 1700000000000 + 6 * 60000, who);
+  assert.equal(state.agenda.sent.half, true);
+  assert.ok(state.message.until);
+  allowed(await put('salas/' + ROOM + '/estado', state), 'depois do aviso da metade');
+  state = core.apply(state, { type: 'alert', kind: 'last', text: 'Falta 1 minuto' }, 1700000000000 + 11 * 60000, who);
+  assert.deepEqual(state.agenda.sent, { half: true, last: true });
+  allowed(await put('salas/' + ROOM + '/estado', state), 'depois do aviso de 1 minuto');
+});
+
 test('a full lap list (99 laps) is accepted', { skip }, async () => {
   let state = core.apply(core.initialState(), { type: 'mode', mode: 'stopwatch' }, 1700000000000, null);
   state = core.apply(state, { type: 'start', target: 'stopwatch' }, 1700000000000, null);
@@ -179,6 +193,10 @@ test('bad data inside a room is refused', { skip }, async () => {
   await bad(withAgenda({ results: { p01: { ...goodResult, extra: 1 } } }), 'campo extra no resultado');
   await bad(withAgenda({ results: { p01: { ...goodResult, by: 'n'.repeat(81) } } }), 'nome longo demais no resultado');
   await bad(withAgenda({ outro: 1 }), 'campo extra na agenda');
+  await bad(withAgenda({ sent: { half: 'sim' } }), 'aviso enviado que não é verdadeiro/falso');
+  await bad(withAgenda({ sent: { half: true, extra: true } }), 'campo extra nos avisos enviados');
+  await bad((s) => { s.message.until = 'amanhã'; }, 'validade da mensagem que não é número');
+  await bad((s) => { s.message.until = 5; s.message.extra = 1; }, 'campo extra na mensagem');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { desde: 1 }), 'aparelho sem nome');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'n'.repeat(81) }), 'aparelho com nome longo');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'ok', extra: 1 }), 'aparelho com campo extra');

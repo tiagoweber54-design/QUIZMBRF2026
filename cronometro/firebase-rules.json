@@ -41,10 +41,16 @@
             "text": { ".validate": "newData.isString() && newData.val().length <= 280" },
             "flash": { ".validate": "newData.isBoolean()" },
             "id": { ".validate": "newData.isNumber()" },
+            "until": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           },
           "agenda": {
             "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "sent": {
+              "half": { ".validate": "newData.isBoolean()" },
+              "last": { ".validate": "newData.isBoolean()" },
+              "$other": { ".validate": false }
+            },
             "results": {
               "$id": {
                 ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",

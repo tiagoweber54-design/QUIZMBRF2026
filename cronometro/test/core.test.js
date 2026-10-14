@@ -389,10 +389,72 @@ test('results survive a trip through the database', () => {
   assert.deepEqual(back.agenda.results.p07, s.agenda.results.p07);
   // an older state without any agenda still works
   const old = core.normalize({ rev: 3, timer: { base: 60000, duration: 60000, elapsed: 0 } });
-  assert.deepEqual(old.agenda, { current: null, results: {} });
+  assert.deepEqual(old.agenda, { current: null, sent: {}, results: {} });
   // junk is dropped
   const junk = core.normalize({ agenda: { current: 'NOT OK!', results: { 'bad id': { used: 1, allowed: 1 }, p01: 'x', p02: { used: 5000, allowed: 'x' }, p03: { used: 5000, allowed: 60000, points: -3 } } } });
   assert.equal(junk.agenda.current, null);
   assert.deepEqual(Object.keys(junk.agenda.results), ['p03']);
   assert.equal(junk.agenda.results.p03.points, 0);
+});
+
+test('automatic messages: half time and one minute left, once each', () => {
+  const text = (k) => (k === 'half' ? 'Metade do tempo: faltam 4 minutos' : 'Falta 1 minuto');
+  let s = onTheClock('p01'); // 8 min
+  s = run(s, [[0, { type: 'start', target: 'timer' }]]);
+  const alert = (kind, at) => core.apply(s, { type: 'alert', kind, text: text(kind) }, T0 + at, me);
+
+  assert.equal(alert('half', 3 * 60000), s, 'too early');
+  assert.equal(alert('last', 3 * 60000), s, 'too early');
+  const half = alert('half', 4 * 60000);
+  assert.equal(half.message.text, 'Metade do tempo: faltam 4 minutos');
+  assert.equal(half.message.flash, true);
+  assert.equal(half.message.id, 1);
+  assert.equal(half.message.until, T0 + 4 * 60000 + core.ALERT_SHOW_MS);
+  assert.equal(half.agenda.sent.half, true);
+  assert.equal(core.apply(half, { type: 'alert', kind: 'half', text: 'de novo' }, T0 + 4 * 60000 + 500, me), half, 'a second device asking changes nothing');
+
+  const late = core.apply(half, { type: 'alert', kind: 'last', text: text('last') }, T0 + 7 * 60000, me);
+  assert.equal(late.message.text, 'Falta 1 minuto');
+  assert.equal(late.message.id, 2);
+  assert.deepEqual(late.agenda.sent, { half: true, last: true });
+  assert.equal(core.apply(late, { type: 'alert', kind: 'last', text: 'x' }, T0 + 7 * 60000 + 1000, me), late);
+  assert.equal(core.apply(s, { type: 'alert', kind: 'last', text: text('last') }, T0 + 8 * 60000 + 1000, me), s, 'too late: already over');
+  assert.equal(core.apply(s, { type: 'alert', kind: 'half', text: 'x' }, T0 + 7 * 60000 + 5000, me), s, 'the half-time message is skipped once the minute warning is near');
+  assert.equal(core.apply(s, { type: 'alert', kind: 'other', text: 'x' }, T0 + 4 * 60000, me), s);
+  assert.equal(core.apply(s, { type: 'alert', kind: 'half', text: '   ' }, T0 + 4 * 60000, me), s);
+});
+
+test('automatic messages need a running presentation and start over with each one', () => {
+  const idle = onTheClock('p01');
+  assert.equal(core.apply(idle, { type: 'alert', kind: 'half', text: 'x' }, T0 + 4 * 60000, me), idle, 'not started');
+  assert.equal(core.apply(core.initialState(), { type: 'alert', kind: 'half', text: 'x' }, T0, me).message.text, '', 'no presentation');
+  let s = run(idle, [[0, { type: 'start', target: 'timer' }], [4 * 60000, { type: 'pause', target: 'timer' }]]);
+  assert.equal(core.apply(s, { type: 'alert', kind: 'half', text: 'x' }, T0 + 5 * 60000, me), s, 'paused');
+  s = run(onTheClock('p01'), [[0, { type: 'start', target: 'timer' }], [10000, { type: 'finish' }]]);
+  assert.equal(core.apply(s, { type: 'alert', kind: 'last', text: 'x' }, T0 + 20000, me), s, 'already registered');
+
+  let a = run(onTheClock('p01'), [[0, { type: 'start', target: 'timer' }]]);
+  a = core.apply(a, { type: 'alert', kind: 'half', text: 'metade' }, T0 + 4 * 60000, me);
+  assert.equal(a.agenda.sent.half, true);
+  assert.deepEqual(core.apply(a, { type: 'reset', target: 'timer' }, T0 + 5 * 60000, me).agenda.sent, {}, 'Zerar');
+  assert.deepEqual(core.apply(a, { type: 'select', id: 'p02', ms: 60000, force: true }, T0 + 5 * 60000, me).agenda.sent, {}, 'next presentation');
+  assert.deepEqual(core.apply(a, { type: 'set', ms: 60000 }, T0 + 5 * 60000, me).agenda.sent, {}, 'free countdown');
+  // a short slot never gets a half-time message
+  const short = run(onTheClock('p03', 2 * 60000), [[0, { type: 'start', target: 'timer' }]]);
+  assert.equal(core.apply(short, { type: 'alert', kind: 'half', text: 'x' }, T0 + 60000, me), short);
+  assert.equal(core.apply(short, { type: 'alert', kind: 'last', text: 'x' }, T0 + 60000, me).agenda.sent.last, true);
+});
+
+test('a typed message replaces an automatic one and does not fade; flags and expiry survive the database', () => {
+  let s = run(onTheClock('p01'), [[0, { type: 'start', target: 'timer' }]]);
+  s = core.apply(s, { type: 'alert', kind: 'half', text: 'metade' }, T0 + 4 * 60000, me);
+  assert.ok(s.message.until);
+  const typed = core.apply(s, { type: 'message', text: 'Conclua, por favor', flash: true }, T0 + 4 * 60000 + 1000, me);
+  assert.equal(typed.message.until, undefined);
+  assert.equal(core.apply(typed, { type: 'message', text: '' }, T0 + 4 * 60000 + 2000, me).message.until, undefined);
+  const back = core.normalize(JSON.parse(JSON.stringify(s)));
+  assert.equal(back.message.until, s.message.until);
+  assert.deepEqual(back.agenda.sent, { half: true });
+  assert.deepEqual(core.normalize({ agenda: { sent: { half: 'yes', last: 1, extra: true } } }).agenda.sent, {});
+  assert.equal(core.normalize({ message: { text: '', until: T0 } }).message.until, undefined);
 });

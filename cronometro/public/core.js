@@ -27,6 +27,7 @@
   // Seminar rule: every FULL minute over the limit costs one point.
   var PENALTY_MS = 60 * SECOND;
   var PENALTY_POINTS = 1;
+  var ALERT_SHOW_MS = 12 * SECOND; // how long an automatic message stays on screen
 
   function initialState() {
     return {
@@ -38,9 +39,10 @@
       stopwatch: { elapsed: 0, startedAt: null, laps: [] },
       settings: { warnAt: 2 * MINUTE, dangerAt: 1 * MINUTE, overtime: true },
       message: { text: '', flash: false, id: 0 },
-      // Seminar: the presentation on the clock and what was registered for each one
+      // Seminar: the presentation on the clock, which automatic messages it already got
+      // (sent.half / sent.last) and what was registered for each one
       // (results[id] = { used, allowed, points, at, by }, all times in ms).
-      agenda: { current: null, results: {} },
+      agenda: { current: null, sent: {}, results: {} },
       last: null // last change: { type, target, ms, by: { id, name }, at }
     };
   }
@@ -140,9 +142,14 @@
     s.message.text = cleanText(m.text, MAX_MESSAGE);
     s.message.flash = m.flash === true && s.message.text !== '';
     s.message.id = int(m.id, 0, Number.MAX_SAFE_INTEGER, 0);
+    if (isTime(m.until) && s.message.text !== '') s.message.until = Math.round(m.until); // automatic messages fade out
 
     var ag = raw.agenda && typeof raw.agenda === 'object' ? raw.agenda : {};
     s.agenda.current = typeof ag.current === 'string' && ID_PATTERN.test(ag.current) ? ag.current : null;
+    if (ag.sent && typeof ag.sent === 'object') {
+      if (ag.sent.half === true) s.agenda.sent.half = true;
+      if (ag.sent.last === true) s.agenda.sent.last = true;
+    }
     var res = ag.results && typeof ag.results === 'object' ? ag.results : {};
     Object.keys(res).slice(0, MAX_RESULTS).forEach(function (id) {
       var r = res[id];
@@ -187,12 +194,15 @@
    *   { type: 'settings', warnAt?, dangerAt?, overtime? }
    *   { type: 'select', id, ms, force? } seminar: put a presentation on the clock (ms = its limit)
    *   { type: 'finish' }                 seminar: stop it and register the time used and the points lost
+   *   { type: 'alert', kind, text }      seminar: automatic message at half time ('half') and one minute left ('last');
+   *                                      accepted once per presentation, only at the right moment
    *   { type: 'clearResult', id }        seminar: forget a registered time ('*' = all of them)
    */
   function apply(state, cmd, now, by) {
     if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return state;
     var next = clone(state);
-    if (!next.agenda) next.agenda = { current: null, results: {} };
+    if (!next.agenda) next.agenda = { current: null, sent: {}, results: {} };
+    if (!next.agenda.sent) next.agenda.sent = {};
     var t = next.timer;
     var w = next.stopwatch;
     var target = cmd.target === 'timer' || cmd.target === 'stopwatch' ? cmd.target : next.mode;
@@ -240,6 +250,7 @@
             t.duration = t.base;
             t.elapsed = 0;
             t.startedAt = null;
+            next.agenda.sent = {};
             changed = true;
           }
         } else if (w.elapsed !== 0 || w.startedAt != null || w.laps.length) {
@@ -251,7 +262,10 @@
         break;
 
       case 'restart':
-        if (target === 'timer') t.duration = t.base;
+        if (target === 'timer') {
+          t.duration = t.base;
+          next.agenda.sent = {};
+        }
         else w.laps = [];
         clock.elapsed = 0;
         clock.startedAt = now;
@@ -267,6 +281,7 @@
         t.elapsed = 0;
         t.startedAt = cmd.start === true ? now : null;
         next.agenda.current = null; // a free countdown is no presentation
+        next.agenda.sent = {};
         target = 'timer';
         changed = true;
         break;
@@ -295,6 +310,7 @@
         // A presentation under way is never replaced by accident.
         if (next.agenda.current && !isRegistered(next) && (t.startedAt != null || t.elapsed > 0) && cmd.force !== true) break;
         next.agenda.current = value;
+        next.agenda.sent = {};
         next.mode = 'timer';
         next.settings.overtime = true; // the time over the limit is what costs points
         t.base = ms;
@@ -357,6 +373,24 @@
         if (value === '' && next.message.text === '') break;
         // A new id on every send, so repeating a message flashes it again.
         next.message = { text: value, flash: value !== '' && cmd.flash === true, id: next.message.id + 1 };
+        changed = true;
+        break;
+
+      case 'alert':
+        if ((cmd.kind !== 'half' && cmd.kind !== 'last') || !next.agenda.current || t.startedAt == null || isRegistered(next)) break;
+        if (next.agenda.sent[cmd.kind]) break; // every device sees the moment arrive; only the first one counts
+        var timeLeft = t.duration - elapsedOf(t, now);
+        if (cmd.kind === 'half') {
+          // not for short slots (the minute warning is enough) and not once it is too late for it
+          if (t.duration <= 2 * MINUTE || timeLeft > t.duration / 2 + SECOND || timeLeft <= MINUTE) break;
+        } else if (timeLeft > MINUTE + SECOND || timeLeft <= 0) {
+          break;
+        }
+        value = cleanText(cmd.text, MAX_MESSAGE);
+        if (!value) break;
+        next.agenda.sent[cmd.kind] = true;
+        next.message = { text: value, flash: true, id: next.message.id + 1, until: now + ALERT_SHOW_MS };
+        target = 'timer';
         changed = true;
         break;
 
@@ -493,6 +527,7 @@
     MAX_MESSAGE: MAX_MESSAGE,
     MAX_NAME: MAX_NAME,
     PENALTY_MS: PENALTY_MS,
+    ALERT_SHOW_MS: ALERT_SHOW_MS,
     ID_PATTERN: ID_PATTERN,
     penaltyPoints: penaltyPoints,
     isRegistered: isRegistered,
