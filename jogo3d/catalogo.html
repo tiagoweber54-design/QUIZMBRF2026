@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Peixes do Brasil 3D</title>
+<style>
+:root{--bg:#06141a;--panel:rgba(8,22,28,.78);--line:rgba(255,255,255,.12);--txt:#e9f1ee;--muted:#9fb3ad;--acc:#f2b33d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.panel{position:fixed;background:var(--panel);border:1px solid var(--line);border-radius:14px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#side{left:12px;top:12px;bottom:12px;width:250px;display:flex;flex-direction:column;overflow:hidden}
+#side h1{font-size:16px;margin:12px 14px 2px}
+#side .sub{font-size:12px;color:var(--muted);margin:0 14px 8px}
+#busca{margin:0 12px 8px;padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--txt);font:inherit;font-size:13px}
+#lista{overflow:auto;padding:0 6px 10px;flex:1}
+.grp{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--acc);margin:10px 8px 4px}
+.it{display:block;width:100%;text-align:left;background:none;border:0;color:var(--txt);padding:6px 8px;border-radius:8px;cursor:pointer;font:inherit;font-size:13.5px}
+.it small{display:block;color:var(--muted);font-style:italic;font-size:11.5px}
+.it:hover{background:rgba(255,255,255,.07)}
+.it.sel{background:rgba(242,179,61,.18);outline:1px solid rgba(242,179,61,.5)}
+#info{right:12px;bottom:12px;width:min(380px,calc(100vw - 24px));padding:14px 16px;font-size:13px;line-height:1.45}
+#info h2{margin:0;font-size:20px}
+#info .sci{font-style:italic;color:var(--muted);margin-bottom:8px}
+#info .stats{display:flex;gap:8px;margin:8px 0}
+#info .st{flex:1;background:rgba(255,255,255,.05);border-radius:9px;padding:6px 8px}
+#info .st span{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+#info .st b{font-size:15px}
+#info p{margin:5px 0;color:#cfdcd7}
+#info p b{color:var(--txt)}
+#tools{top:12px;right:12px;padding:6px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 290px)}
+button.tb{font:inherit;font-size:13px;color:var(--txt);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.15);border-radius:8px;padding:6px 10px;cursor:pointer}
+button.tb:hover{background:rgba(255,255,255,.14)}
+button.tb.on{background:var(--acc);color:#1d1404;border-color:var(--acc)}
+#sel{display:none}
+#labels{position:fixed;inset:0;pointer-events:none}
+.lbl{position:absolute;transform:translate(-50%,0);font-size:11.5px;white-space:nowrap;text-shadow:0 1px 4px #000;color:#e8f0ec}
+#load{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);font-size:14px;color:var(--muted)}
+#hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font-size:12px;color:var(--muted);pointer-events:none;text-shadow:0 1px 3px #000}
+#infoToggle{display:none}
+@media (max-width:760px){
+  #side{display:none}
+  #sel{display:block;position:fixed;left:12px;top:12px;right:12px;padding:9px 10px;border-radius:10px;background:var(--panel);color:var(--txt);border:1px solid var(--line);font:inherit;font-size:14px}
+  #tools{top:58px;left:12px;right:12px;max-width:none;justify-content:center}
+  #info{max-height:42vh;overflow:auto}
+  #info.min .det{display:none}
+  #infoToggle{display:inline-block;float:right}
+  #hint{display:none}
+}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="side" class="panel">
+  <h1>🐟 Peixes do Brasil 3D</h1>
+  <div class="sub">30 espécies modeladas proceduralmente</div>
+  <input id="busca" placeholder="Buscar espécie…" autocomplete="off">
+  <div id="lista"></div>
+</div>
+<select id="sel"></select>
+<div id="tools" class="panel">
+  <button class="tb on" id="tNadar" title="Animação de natação">Nadar</button>
+  <button class="tb on" id="tGirar" title="Girar a câmera automaticamente">Girar</button>
+  <button class="tb on" id="tRegua" title="Régua com o tamanho real">Régua</button>
+  <button class="tb" id="tArame" title="Ver a malha 3D">Malha</button>
+  <button class="tb" id="tTodos" title="Ver todas as espécies">Todos</button>
+</div>
+<div id="info" class="panel"></div>
+<div id="load">Carregando…</div>
+<div id="hint">Arraste para girar · role para aproximar · clique num peixe no modo Todos</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { ESPECIES, GRUPOS, POR_ID } from './peixes/especies.js';
+import { criarPeixe } from './peixes/gerador.js';
+
+const $ = id => document.getElementById(id);
+const fmtM = m => m < 1 ? `${Math.round(m * 100)} cm` : `${m.toFixed(2).replace('.', ',')} m`;
+const fmtKg = kg => kg < 1 ? `${Math.round(kg * 1000)} g` : `${String(kg).replace('.', ',')} kg`;
+
+/* ---------------- renderizador e cena ---------------- */
+const canvas = $('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const MAXANI = renderer.capabilities.getMaxAnisotropy();
+
+const scene = new THREE.Scene();
+const fogCol = new THREE.Color('#0b2a33');
+scene.fog = new THREE.FogExp2(fogCol, .055);
+{ // fundo em degradê
+  const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#2c6e7a'); gr.addColorStop(.45, '#124350'); gr.addColorStop(1, '#061a20');
+  g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t;
+}
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), .04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, 1, .01, 200);
+camera.position.set(.9, .55, 1.6);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.autoRotate = true; controls.autoRotateSpeed = .8;
+controls.maxPolarAngle = Math.PI * .92;
+
+scene.add(new THREE.HemisphereLight(0xcdeeff, 0x2c3a2a, 1.1));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.4); sun.position.set(2, 6, 3); scene.add(sun);
+const rim = new THREE.DirectionalLight(0x7fd4ff, 1.2); rim.position.set(-4, 2, -3); scene.add(rim);
+
+// fundo de areia com cáusticas
+const U = { uTime: { value: 0 } };
+const sand = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#8a7a5a'; g.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 9000; i++) { const v = 90 + Math.random() * 80; g.fillStyle = `rgba(${v},${v * .9},${v * .7},.35)`; g.fillRect(Math.random() * 512, Math.random() * 512, 2, 2); }
+  for (let i = 0; i < 40; i++) { g.strokeStyle = 'rgba(60,50,35,.15)'; g.lineWidth = 6; g.beginPath(); const y = Math.random() * 512; g.moveTo(0, y); for (let x = 0; x <= 512; x += 32) g.lineTo(x, y + Math.sin(x * .03 + i) * 10); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(30, 30); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = MAXANI; return t;
+})();
+const floorMat = new THREE.MeshStandardMaterial({ map: sand, roughness: .95 });
+floorMat.onBeforeCompile = sh => {
+  sh.uniforms.uTime = U.uTime;
+  sh.vertexShader = 'varying vec3 vWP;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP=(modelMatrix*vec4(transformed,1.0)).xyz;');
+  sh.fragmentShader = 'uniform float uTime; varying vec3 vWP;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    { vec2 p = vWP.xz*2.2; float t = uTime*.7; float v = 0.0;
+      v += sin(p.x*3.1+t) + sin(p.y*2.7-t*1.2);
+      v += sin((p.x+p.y)*2.3+t*.7) + sin(length(p+vec2(sin(t*.3),cos(t*.2))*3.0)*3.7-t);
+      v *= .25; float c = pow(1.0-abs(v), 7.0);
+      vec2 q = p*1.7+vec2(4.0); float w = .25*(sin(q.x*2.9-t*1.1)+sin(q.y*3.3+t)+sin((q.x-q.y)*2.1+t*.6)+sin(length(q)*3.1+t));
+      c += .6*pow(1.0-abs(w), 9.0);
+      totalEmissiveRadiance += vec3(.55,.8,.75)*c*.55; }`);
+};
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), floorMat);
+floor.rotation.x = -Math.PI / 2; scene.add(floor);
+
+// partículas em suspensão
+const parts = (() => {
+  const n = 900, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - .5) * 14; pos[i * 3 + 1] = Math.random() * 5; pos[i * 3 + 2] = (Math.random() - .5) * 14; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.PointsMaterial({ color: 0xcfe8dc, size: .012, transparent: true, opacity: .5, depthWrite: false });
+  const p = new THREE.Points(g, m); scene.add(p); return p;
+})();
+
+// sombra de contato
+const shadowTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c);
+})();
+const mkShadow = () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.y = .002; return m; };
+
+/* ---------------- régua ---------------- */
+function criarRegua(L) {
+  const g = new THREE.Group();
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 96; const x = c.getContext('2d');
+  x.fillStyle = 'rgba(240,236,220,.92)'; x.fillRect(0, 30, 1024, 36);
+  const cm = L * 100, step = cm > 150 ? 10 : cm > 40 ? 5 : 1;
+  x.fillStyle = '#222'; x.font = 'bold 22px system-ui'; x.textAlign = 'center';
+  for (let v = 0; v <= cm + .01; v += step) {
+    const px = v / cm * 1024, big = Math.round(v) % (step * 5) === 0;
+    x.fillRect(Math.min(px, 1022), 30, 2, big ? 26 : 14);
+    if (big && px > 20 && px < 1000) x.fillText(String(Math.round(v)), px, 88);
+  }
+  x.fillStyle = '#f2b33d'; x.fillText(`${fmtM(L)}`, 512, 22);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = MAXANI;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(L, L * 96 / 1024 * 1.4), new THREE.MeshBasicMaterial({ map: t, transparent: true }));
+  m.rotation.x = -Math.PI / 2; m.position.set(0, .004, L * .22); g.add(m);
+  return g;
+}
+
+/* ---------------- estado ---------------- */
+let atual = null, regua = null, sombra = null, modoTodos = false, todos = [];
+const opts = { nadar: true, arame: false, regua: true };
+
+function limpar() {
+  if (atual) { scene.remove(atual); atual.userData.dispose(); atual = null; }
+  if (regua) { scene.remove(regua); regua = null; }
+  if (sombra) { scene.remove(sombra); sombra = null; }
+}
+function limparTodos() { for (const t of todos) { scene.remove(t.g); scene.remove(t.s); t.g.userData.dispose(); } todos = []; $('labels').innerHTML = ''; }
+
+function mostrar(id) {
+  const sp = POR_ID[id]; if (!sp) return;
+  if (modoTodos) { modoTodos = false; $('tTodos').classList.remove('on'); limparTodos(); }
+  limpar();
+  const t0 = performance.now();
+  const g = criarPeixe(sp, { res: 2048 });
+  g.traverse(o => { if (o.material?.map) o.material.map.anisotropy = MAXANI; });
+  const L = sp.tl, y = Math.max(.12, L * .32);
+  g.scale.setScalar(L); g.position.set(0, y, 0);
+  aplicarArame(g);
+  scene.add(g); atual = g;
+  sombra = mkShadow(); sombra.scale.set(L * 1.1, L * .45, 1); scene.add(sombra);
+  if (opts.regua) { regua = criarRegua(L); scene.add(regua); }
+  const mob = innerWidth < 760;
+  controls.target.set(0, y - (mob ? L * .12 : 0), 0);
+  // distância para caber o peixe inteiro na largura da tela
+  const fit = L * .66 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+  const d = Math.max(L * 1.55 + .25, fit);
+  camera.position.set(d * .45, y + d * .28, d);
+  controls.minDistance = L * .3; controls.maxDistance = Math.max(8, L * 6);
+  scene.fog.density = .09 / Math.max(.6, L);
+  info(sp);
+  document.querySelectorAll('.it').forEach(b => b.classList.toggle('sel', b.dataset.id === id));
+  $('sel').value = id;
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  $('load').style.display = 'none';
+  console.log(`${sp.nome}: ${(performance.now() - t0).toFixed(0)} ms`);
+}
+
+function info(sp) {
+  $('info').innerHTML = `
+    <button class="tb" id="infoToggle">ficha</button>
+    <h2>${sp.nome}</h2><div class="sci">${sp.sci} · ${sp.familia}</div>
+    <div class="stats">
+      <div class="st"><span>Comum</span><b>${fmtM(sp.tl)}</b></div>
+      <div class="st"><span>Máximo</span><b>${fmtM(sp.tlMax)}</b></div>
+      <div class="st"><span>Peso máx.</span><b>${fmtKg(sp.kgMax)}</b></div>
+    </div>
+    <div class="det">
+    <p><b>Bacias:</b> ${sp.bacias}</p>
+    <p><b>Habitat:</b> ${sp.habitat}</p>
+    <p><b>Iscas:</b> ${sp.iscas}</p>
+    <p><b>Dica:</b> ${sp.dica}</p></div>`;
+  $('infoToggle').onclick = () => $('info').classList.toggle('min');
+  if (innerWidth < 760 && !info.feito) { $('info').classList.add('min'); info.feito = true; }
+}
+
+function aplicarArame(g) { g.traverse(o => { if (o.material) o.material.wireframe = opts.arame; }); }
+
+function mostrarTodos() {
+  limpar(); modoTodos = true;
+  const cols = innerWidth < 760 ? 3 : 6, sx = 1.25, sz = .9;
+  ESPECIES.forEach((sp, i) => {
+    const g = criarPeixe(sp, { res: 512, finRes: 128, nt: 70, na: 40 });
+    const c = i % cols, r = Math.floor(i / cols);
+    const S = .9;
+    g.scale.setScalar(S);
+    g.position.set((c - (cols - 1) / 2) * sx, .32, (r - 2) * sz);
+    aplicarArame(g);
+    scene.add(g);
+    const s = mkShadow(); s.scale.set(S, S * .4, 1); s.position.set(g.position.x, .002, g.position.z); scene.add(s);
+    const el = document.createElement('div'); el.className = 'lbl'; el.textContent = sp.nome; $('labels').appendChild(el);
+    todos.push({ g, s, el, sp });
+  });
+  const rows = Math.ceil(ESPECIES.length / cols);
+  const side = innerWidth >= 760 ? -1.0 : 0; // compensa a barra lateral
+  controls.target.set(side, .3, .2);
+  const fit = (cols * sx) * .72 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect);
+  const dist = Math.max(4.4 + rows * .5, fit);
+  camera.position.set(side, dist * .78, dist * .8);
+  controls.minDistance = .5; controls.maxDistance = 20;
+  scene.fog.density = .025;
+  $('info').innerHTML = `<h2>30 espécies</h2><div class="sci">Clique (ou toque) em um peixe para abrir a ficha.</div>`;
+}
+
+/* ---------------- interface ---------------- */
+function montarLista(filtro = '') {
+  const f = filtro.trim().toLowerCase();
+  const L = $('lista'); L.innerHTML = '';
+  for (const gr of GRUPOS) {
+    const sps = ESPECIES.filter(s => s.grupo === gr.id && (!f || s.nome.toLowerCase().includes(f) || s.sci.toLowerCase().includes(f)));
+    if (!sps.length) continue;
+    const h = document.createElement('div'); h.className = 'grp'; h.textContent = gr.nome; L.appendChild(h);
+    for (const s of sps) {
+      const b = document.createElement('button'); b.className = 'it'; b.dataset.id = s.id;
+      b.innerHTML = `${s.nome}<small>${s.sci}</small>`; b.onclick = () => mostrar(s.id);
+      if (atual?.userData.sp.id === s.id) b.classList.add('sel');
+      L.appendChild(b);
+    }
+  }
+}
+montarLista();
+$('busca').oninput = e => montarLista(e.target.value);
+for (const gr of GRUPOS) {
+  const og = document.createElement('optgroup'); og.label = gr.nome;
+  for (const s of ESPECIES.filter(s => s.grupo === gr.id)) { const o = document.createElement('option'); o.value = s.id; o.textContent = s.nome; og.appendChild(o); }
+  $('sel').appendChild(og);
+}
+$('sel').onchange = e => mostrar(e.target.value);
+const tog = (id, fn) => $(id).onclick = () => { const on = !$(id).classList.contains('on'); $(id).classList.toggle('on', on); fn(on); };
+tog('tNadar', v => opts.nadar = v);
+tog('tGirar', v => controls.autoRotate = v);
+tog('tRegua', v => { opts.regua = v; if (atual) { if (regua) { scene.remove(regua); regua = null; } if (v) { regua = criarRegua(atual.userData.sp.tl); scene.add(regua); } } });
+tog('tArame', v => { opts.arame = v; if (atual) aplicarArame(atual); for (const t of todos) aplicarArame(t.g); });
+tog('tTodos', v => { if (v) { mostrarTodos(); } else { const id = todos[0]?.sp.id || ESPECIES[0].id; limparTodos(); modoTodos = false; mostrar(id); } });
+
+// seleção por clique no modo Todos
+const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+let downAt = null;
+canvas.addEventListener('pointerdown', e => downAt = [e.clientX, e.clientY]);
+canvas.addEventListener('pointerup', e => {
+  if (!modoTodos || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  ptr.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(todos.map(t => t.g), true)[0];
+  if (hit) { let o = hit.object; while (o.parent && !todos.find(t => t.g === o)) o = o.parent; const t = todos.find(t => t.g === o); if (t) { $('tTodos').classList.remove('on'); mostrar(t.sp.id); } }
+});
+
+function resize() {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+/* ---------------- laço ---------------- */
+const clock = new THREE.Clock(); let tt = 0;
+const v = new THREE.Vector3();
+function loop() {
+  const dt = Math.min(.05, clock.getDelta());
+  if (opts.nadar) tt += dt;
+  U.uTime.value += dt;
+  parts.rotation.y += dt * .01; parts.position.y = Math.sin(U.uTime.value * .2) * .05;
+  if (atual) {
+    atual.userData.nadar(tt);
+    atual.position.y = Math.max(.12, atual.userData.sp.tl * .32) + (opts.nadar ? Math.sin(tt * 1.3) * atual.userData.sp.tl * .015 : 0);
+  }
+  for (const t of todos) {
+    t.g.userData.nadar(tt);
+    v.copy(t.g.position); v.y -= .12; v.project(camera);
+    const vis = v.z < 1;
+    t.el.style.display = vis ? '' : 'none';
+    if (vis) { t.el.style.left = (v.x * .5 + .5) * innerWidth + 'px'; t.el.style.top = (-v.y * .5 + .5) * innerHeight + 'px'; }
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(loop);
+}
+const inicial = (location.hash || '').slice(1);
+mostrar(POR_ID[inicial] ? inicial : 'tucunare-acu');
+loop();
+window.__app = { mostrar, mostrarTodos, ESPECIES, camera, controls, scene, opts };
+</script>
+</body>
+</html>
