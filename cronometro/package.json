@@ -6,7 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js --abrir",
-    "test": "node --test test/core.test.js test/server.test.js"
+    "test": "node --test test/core.test.js test/cloud.test.js test/server.test.js test/rules.test.js"
   },
   "engines": {
     "node": ">=16"

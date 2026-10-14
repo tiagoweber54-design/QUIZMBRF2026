@@ -63,6 +63,16 @@
 
   function clone(state) { return JSON.parse(JSON.stringify(state)); }
 
+  // A list, or the {"0": …, "1": …} object a database may hand back in its place.
+  function listOf(v) {
+    if (Array.isArray(v)) return v;
+    if (!v || typeof v !== 'object') return [];
+    return Object.keys(v)
+      .filter(function (k) { return /^\d+$/.test(k); })
+      .sort(function (a, b) { return a - b; })
+      .map(function (k) { return v[k]; });
+  }
+
   function elapsedOf(clock, now) {
     return clock.startedAt == null ? clock.elapsed : clock.elapsed + Math.max(0, now - clock.startedAt);
   }
@@ -95,7 +105,7 @@
     var w = raw.stopwatch || {};
     s.stopwatch.elapsed = int(w.elapsed, 0, MAX_MS, 0);
     s.stopwatch.startedAt = isTime(w.startedAt) ? Math.round(w.startedAt) : null;
-    s.stopwatch.laps = (Array.isArray(w.laps) ? w.laps : [])
+    s.stopwatch.laps = listOf(w.laps)
       .filter(function (x) { return isNum(x) && x >= 0; })
       .slice(0, MAX_LAPS)
       .map(function (x) { return Math.min(Math.round(x), MAX_MS); });

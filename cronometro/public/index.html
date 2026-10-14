@@ -164,7 +164,7 @@
       <button type="button" class="icon-btn" data-close aria-label="Fechar"><svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg></button>
     </div>
     <div id="connectServer">
-      <p>Conecte o iPad, o iPhone ou outro computador na <strong>mesma rede Wi-Fi</strong> e abra este endereço no navegador:</p>
+      <p id="connectIntro">Conecte o iPad, o iPhone ou outro computador na <strong>mesma rede Wi-Fi</strong> e abra este endereço no navegador:</p>
       <div class="url-row">
         <code id="shareUrl" class="url"></code>
         <button type="button" id="copyBtn" class="btn btn-small btn-quiet"><svg aria-hidden="true" class="i"><use xlink:href="#i-copy" href="#i-copy"/></svg><span>Copiar</span></button>
@@ -172,6 +172,17 @@
       <div id="qr" class="qr" aria-label="QR code do endereço"></div>
       <p class="muted small center">No iPhone/iPad: abra a <strong>Câmera</strong> e aponte para o código.</p>
       <div id="otherUrls" class="other-urls" hidden></div>
+      <div id="cloudExtras" hidden>
+        <div class="room-row">
+          <span>Código da sala <small class="muted">(para digitar em outro aparelho)</small></span>
+          <strong id="roomCode" class="room-code"></strong>
+        </div>
+        <p id="cloudProblem" class="problem small" hidden></p>
+        <div class="row-between">
+          <button type="button" id="changeRoomBtn" class="btn btn-small btn-quiet">Trocar de sala</button>
+          <a class="link small" href="teste.html">Testar a conexão</a>
+        </div>
+      </div>
     </div>
     <div id="connectLocal" hidden>
       <p><strong>Este aparelho está sem servidor</strong>, então o tempo não é compartilhado com outros aparelhos.</p>
@@ -180,9 +191,42 @@
         <li>Abra nos aparelhos o endereço que aparecer na janela (ex.: <code>http://192.168.0.15:3000</code>).</li>
       </ol>
       <p class="muted small">Precisa do Node.js instalado no computador (nodejs.org). Veja o arquivo README.md da pasta.</p>
+      <div id="setupCloud" hidden>
+        <p>Ou sincronize <strong>pela internet</strong>, sem instalar nada no computador:</p>
+        <button type="button" id="setupCloudBtn" class="btn btn-small btn-accent">Sincronizar pela internet</button>
+      </div>
     </div>
     <h3 class="sheet-sub">Aparelhos conectados agora <span id="deviceCount" class="pill"></span></h3>
     <ul id="devices" class="devices"></ul>
+  </div>
+</div>
+
+<div id="roomModal" class="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="roomTitle">
+    <div class="sheet-head">
+      <h2 id="roomTitle">Sincronizar pela internet</h2>
+      <button type="button" id="roomClose" class="icon-btn" data-close aria-label="Fechar"><svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg></button>
+    </div>
+    <p>Os aparelhos que entram na mesma <strong>sala</strong> mostram o mesmo tempo e todos podem controlá-lo, em qualquer rede, desde que tenham internet.</p>
+
+    <div id="dbBlock" class="field">
+      <label for="dbInput">Endereço do Firebase</label>
+      <input id="dbInput" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
+      <p class="muted small">Copie da aba <strong>Dados</strong> do Realtime Database, no console do Firebase (passo a passo no LEIA-ME).</p>
+    </div>
+
+    <h3 class="sheet-sub">Esta é a tela principal?</h3>
+    <button type="button" id="roomCreateBtn" class="btn btn-block btn-accent">Criar uma sala nova</button>
+
+    <h3 class="sheet-sub">Ou entre numa sala que já existe</h3>
+    <form id="roomJoinForm" class="inline-form" autocomplete="off">
+      <input id="roomInput" type="text" autocapitalize="characters" autocorrect="off" spellcheck="false" maxlength="14" enterkeyhint="go" placeholder="Código, ex.: K7M2-Q9XR" aria-label="Código da sala">
+      <button type="submit" class="btn btn-small btn-accent">Entrar</button>
+    </form>
+    <p id="roomError" class="problem small" role="alert" hidden></p>
+    <p class="muted small">O código aparece no botão de QR code da tela principal.</p>
+
+    <div class="row-center"><button type="button" id="roomLocalBtn" class="btn btn-small btn-quiet">Usar só neste aparelho</button></div>
   </div>
 </div>
 
@@ -246,6 +290,8 @@
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script src="core.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="app.js"></script>
 </body>

@@ -749,6 +749,48 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .display.tight .sub { margin-top: 4px; }
 .display.tiny .title, .display.tiny .sub, .display.tiny .progress { display: none; }
 
+/* ------------------------------------------------------------- cloud mode */
+
+.field { margin: 14px 0 4px; }
+.field label { display: block; margin-bottom: 6px; font-weight: 650; }
+.field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  background: var(--input);
+  font-size: 16px;
+}
+.field input:focus { border-color: var(--info); }
+.field input::placeholder, .inline-form input::placeholder { color: #5d6573; }
+.btn-block { width: 100%; height: 52px; font-size: 17px; }
+.row-center { display: flex; justify-content: center; margin-top: 18px; }
+.problem { margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: #3a1d12; color: #ffb4a8; }
+.url.long { font-size: 14px; font-weight: 600; }
+.link { color: var(--info); text-decoration: none; font-weight: 650; }
+.link:hover { text-decoration: underline; }
+.room-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--input);
+}
+.room-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+#roomInput { text-transform: uppercase; }
+#roomInput::placeholder { text-transform: none; }
+
 /* --------------------------------------------------------------- motion */
 
 @keyframes blink { 50% { opacity: 0.25; } }

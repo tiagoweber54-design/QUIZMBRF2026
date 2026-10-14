@@ -9,6 +9,7 @@
   'use strict';
 
   var Core = window.TimerCore;
+  var Cloud = window.Cloud; // cloud.js: missing only if that file failed to load
   var SECOND = Core.SECOND;
   var MINUTE = Core.MINUTE;
 
@@ -17,6 +18,9 @@
   var THRESHOLD_SECONDS = [0, 5, 10, 15, 20, 30, 60, 120, 180, 300, 600, 900];
   var PREFS_KEY = 'cronometro-sync.prefs';
   var LOCAL_STATE_KEY = 'cronometro-sync.state';
+  var ROOM_KEY = 'cronometro-sync.sala';
+  var DB_KEY = 'cronometro-sync.db';
+  var LOCAL_CHOICE_KEY = 'cronometro-sync.so-local';
   var PREF_DEFAULTS = { sound: true, clock: true, awake: true, display: false, name: '' };
 
   // ------------------------------------------------------------- helpers
@@ -91,11 +95,13 @@
     'inH', 'inM', 'inS', 'laps', 'lapsEmpty', 'messageForm', 'messageInput', 'quickMessages', 'flashInput',
     'clearMessageBtn', 'titleForm', 'titleInput', 'connectModal', 'connectServer', 'shareUrl', 'copyBtn', 'qr',
     'otherUrls', 'connectLocal', 'deviceCount', 'devices', 'settingsModal', 'warnSel', 'dangerSel', 'overtimeChk',
-    'soundChk', 'testSoundBtn', 'clockChk', 'awakeChk', 'awakeNote', 'nameInput', 'versionText', 'toast'
+    'soundChk', 'testSoundBtn', 'clockChk', 'awakeChk', 'awakeNote', 'nameInput', 'versionText', 'toast',
+    'connectIntro', 'cloudExtras', 'roomCode', 'cloudProblem', 'changeRoomBtn', 'setupCloud', 'setupCloudBtn',
+    'roomModal', 'roomClose', 'dbBlock', 'dbInput', 'roomCreateBtn', 'roomJoinForm', 'roomInput', 'roomError', 'roomLocalBtn'
   ].forEach(function (id) { el[id] = $(id); });
   var app = el.app;
   var segButtons = Array.prototype.slice.call(document.querySelectorAll('.seg'));
-  var modals = [el.connectModal, el.settingsModal];
+  var modals = [el.connectModal, el.settingsModal, el.roomModal];
 
   // ------------------------------------------------------------ identity
 
@@ -130,6 +136,11 @@
   var serverInfo = null;
   var devices = [];
   var shownMessageId = null;
+  var cloudMode = false;        // syncing through Firebase (no server of ours)
+  var cloud = { db: '', room: '', configHost: '', problem: '' };
+  var roomRequired = false;     // the room dialog cannot be dismissed yet
+  var lastAnnounced = '';       // so a change by someone else is announced once
+  var hiddenAt = 0;             // when the page went to the background
 
   function serverNow() { return Date.now() + clockOffset; }
 
@@ -161,10 +172,24 @@
     kick();
   }
 
+  // The cloud database already orders and merges changes (and shows ours at
+  // once), so every state it reports is shown as it comes.
+  function liveState(next, first) {
+    latest = { state: next, instance: 'cloud' };
+    var last = next.last;
+    var key = last ? [last.at, last.type, last.by && last.by.id].join('|') : '';
+    if (!first && key !== lastAnnounced) announce(last);
+    lastAnnounced = key;
+    show(next, { snapshot: first });
+  }
+
   function dispatch(cmd) {
-    if (!link) return;
+    if (!link) {
+      toast('Conectando… tente de novo em instantes.', 'warn');
+      return;
+    }
     if (conn !== 'online' && conn !== 'local') {
-      toast('Sem conexão com o servidor — tentando reconectar…', 'warn');
+      toast('Sem conexão — tentando reconectar…', 'warn');
       return;
     }
     if (link.optimistic) {
@@ -363,17 +388,221 @@
     link = new LocalLink();
   }
 
+  // ----------------------------------------------------------- cloud link
+
+  // Sync through the Firebase Realtime Database: nothing to install anywhere,
+  // the SDK keeps the data and the connection alive.
+  function CloudLink(db, room) {
+    this.optimistic = false; // the SDK shows our own changes at once
+    this.closed = false;
+    this.connection = null;
+    this.db = db;
+    this.room = room;
+  }
+
+  CloudLink.prototype.open = function () {
+    var self = this;
+    this.connection = Cloud.connect({
+      firebase: window.firebase,
+      db: this.db,
+      emulator: (window.CRONOMETRO_FIREBASE || {}).emulator,
+      room: this.room,
+      client: me,
+      now: serverNow,
+      handlers: {
+        onStatus: function (status) { if (!self.closed) setConnection(status); },
+        onOffset: function (ms) {
+          if (self.closed) return;
+          clockOffset = ms;
+          clockSynced = true;
+          kick();
+        },
+        onState: function (next, first) { if (!self.closed) liveState(next, first); },
+        onDevices: function (list) { if (!self.closed) setDevices(list); },
+        onError: function (err) { if (!self.closed) cloudError(err); }
+      }
+    });
+  };
+
+  CloudLink.prototype.send = function (cmd) {
+    return this.connection ? this.connection.send(cmd) : Promise.reject(new Error('sem conexão'));
+  };
+
+  CloudLink.prototype.rename = function () {
+    if (this.connection) this.connection.rename(deviceName());
+  };
+
+  CloudLink.prototype.wake = function () {
+    if (this.connection) this.connection.wake(hiddenAt ? Date.now() - hiddenAt : 0);
+  };
+
+  CloudLink.prototype.leave = function () {
+    var connection = this.connection;
+    this.closed = true;
+    this.connection = null;
+    return connection ? connection.leave() : Promise.resolve();
+  };
+
+  var CLOUD_PROBLEMS = {
+    rules: ['O Firebase recusou: confira as regras de segurança.',
+      'As regras de segurança do Firebase não permitem este uso. Cole as regras do LEIA-ME na aba Regras do Realtime Database e clique em Publicar.'],
+    timeout: ['Não consegui conectar ao Firebase.',
+      'Não consegui conectar ao Firebase. Confira a internet e o endereço do banco de dados; a rede pode estar bloqueando o serviço.'],
+    sdk: ['Não consegui carregar o Firebase.',
+      'Não consegui carregar os arquivos do Firebase. Confira a internet; o programa tenta de novo sozinho.'],
+    error: ['Erro na conexão com o Firebase.',
+      'Houve um erro na conexão com o Firebase. Use "Testar a conexão" para ver o motivo.']
+  };
+
+  function cloudError(err) {
+    var texts = CLOUD_PROBLEMS[err.code] || CLOUD_PROBLEMS.error;
+    cloud.problem = texts[1];
+    toast(texts[0], 'error');
+    if (!el.connectModal.hidden) renderConnect();
+  }
+
+  // The database and room to use: the link that was opened wins, then this
+  // site's firebase-config.js, then whatever this device remembers.
+  function loadCloudSettings() {
+    var fromConfig = Cloud.parseDbUrl((window.CRONOMETRO_FIREBASE || {}).databaseURL || '');
+    var fromLink = Cloud.parseHash(location.hash);
+    cloud.configHost = fromConfig ? fromConfig.host : '';
+    cloud.db = fromLink.db || cloud.configHost || readStorage(DB_KEY) || '';
+    cloud.room = fromLink.room || readStorage(ROOM_KEY) || '';
+    if (fromLink.db && fromLink.db !== cloud.configHost) writeStorage(DB_KEY, fromLink.db);
+    if (fromLink.room) writeStorage(ROOM_KEY, fromLink.room);
+    return fromLink;
+  }
+
+  function startCloudMode() {
+    if (link) return;
+    if (!window.Cloud) return startLocalLink();
+    cloudMode = true;
+    var fromLink = loadCloudSettings();
+    if (!fromLink.room && readStorage(LOCAL_CHOICE_KEY) === '1') {
+      cloudMode = false;
+      return startLocalLink();
+    }
+    setText(el.versionText, '(nuvem)');
+    if (cloud.db && cloud.room) connectCloud();
+    else openRoomDialog(true);
+  }
+
+  function connectCloud() {
+    cloudMode = true;
+    setConnection('connecting');
+    keepRoomInAddress();
+    Cloud.loadSdk().then(function () {
+      if (link) return;
+      link = new CloudLink(cloud.db, cloud.room);
+      link.open();
+    }, function () {
+      cloudError({ code: 'sdk' });
+      setConnection('offline');
+      setTimeout(function () { if (!link) connectCloud(); }, 8000);
+    });
+  }
+
+  // The address bar always holds the link to this room, ready to copy.
+  function keepRoomInAddress() {
+    try {
+      window.history.replaceState(null, '', location.pathname + location.search + shareHash());
+    } catch (e) { /* not essential */ }
+  }
+
+  function shareHash() {
+    return Cloud.buildLink('', cloud.room, cloud.db === cloud.configHost ? '' : cloud.db);
+  }
+
+  function shareLink() { return Cloud.pageBase(location) + shareHash(); }
+
+  function resetRoomState() {
+    state = Core.initialState();
+    latest = null;
+    devices = [];
+    shownMessageId = null;
+    lastAnnounced = '';
+    cloud.problem = '';
+    renderState({ snapshot: true });
+    renderStatus();
+    kick();
+  }
+
+  // ------------------------------------------------------------ room dialog
+
+  function openRoomDialog(required) {
+    roomRequired = !!required;
+    el.roomClose.hidden = roomRequired;
+    el.dbBlock.hidden = !!cloud.db;
+    el.dbInput.value = '';
+    el.roomInput.value = cloud.room && !link ? Cloud.formatRoom(cloud.room) : '';
+    showRoomError('');
+    if (!link) setConnection('setup');
+    openModal(el.roomModal);
+    var field = cloud.db ? el.roomInput : el.dbInput;
+    if (!/iPad|iPhone|iPod/.test(navigator.userAgent)) field.focus();
+  }
+
+  function showRoomError(message) {
+    el.roomError.hidden = !message;
+    el.roomError.textContent = message || '';
+  }
+
+  function dbHelp(text) {
+    if (/console\.firebase\.google\.com/i.test(text)) {
+      return 'Esse é o endereço do console do Firebase. Copie o endereço do banco: na aba Dados do Realtime Database ele aparece no alto e termina em firebaseio.com ou firebasedatabase.app.';
+    }
+    return 'Endereço inválido. Ele aparece no alto da aba Dados do Realtime Database e termina em firebaseio.com ou firebasedatabase.app.';
+  }
+
+  function chooseRoom(room) {
+    var db = cloud.db;
+    if (!db) {
+      var parsed = Cloud.parseDbUrl(el.dbInput.value);
+      if (!parsed) {
+        showRoomError(dbHelp(el.dbInput.value));
+        el.dbInput.focus();
+        return;
+      }
+      db = parsed.host;
+    }
+    var old = link;
+    link = null;
+    if (old && old.leave) old.leave();
+    cloudMode = true;
+    cloud.db = db;
+    cloud.room = room;
+    writeStorage(ROOM_KEY, room);
+    writeStorage(LOCAL_CHOICE_KEY, '');
+    if (db !== cloud.configHost) writeStorage(DB_KEY, db);
+    resetRoomState();
+    roomRequired = false;
+    closeModals();
+    setText(el.versionText, '(nuvem)');
+    connectCloud();
+  }
+
+  function useOnlyThisDevice() {
+    writeStorage(LOCAL_CHOICE_KEY, '1');
+    roomRequired = false;
+    closeModals();
+    cloudMode = false;
+    startLocalLink();
+  }
+
   function detectServer(attempt) {
     if (location.protocol === 'file:') return startLocalLink();
     fetch('api/info', { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (info) {
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (text) {
+        // Hosts that answer every address with the page itself send HTML here: not ours.
+        var info = parseJson(text);
         if (info && info.app === 'cronometro-sync') startServerLink(info);
-        else startLocalLink();
+        else startCloudMode();
       }, function () {
-        // A network hiccup right after loading: try again before going solo.
+        // No answer at all: a hiccup, or a plain web host. Try again, then go on without our server.
         if (attempt < 2) setTimeout(function () { detectServer(attempt + 1); }, 1500);
-        else startLocalLink();
+        else startCloudMode();
       });
   }
 
@@ -393,15 +622,17 @@
 
   function renderStatus() {
     app.setAttribute('data-conn', conn);
-    var n = devices.length;
+    var n = Math.max(devices.length, 1);
     var text = conn === 'online' ? (n === 1 ? '1 aparelho' : n + ' aparelhos')
       : conn === 'offline' ? 'Reconectando…'
       : conn === 'local' ? 'Sem servidor'
+      : conn === 'setup' ? 'Configurar'
       : 'Conectando…';
     setText(el.statusText, text);
     el.statusBtn.title = conn === 'online' ? 'Sincronizado — toque para ver os aparelhos'
-      : conn === 'offline' ? 'Sem conexão com o servidor; tentando de novo'
+      : conn === 'offline' ? 'Sem conexão; tentando de novo'
       : conn === 'local' ? 'Funcionando só neste aparelho'
+      : conn === 'setup' ? 'Toque para escolher a sala'
       : '';
   }
 
@@ -865,11 +1096,16 @@
     modal.hidden = false;
     if (modal === el.connectModal) {
       renderConnect();
-      if (conn !== 'local') refreshServerInfo();
+      if (conn !== 'local' && !cloudMode) refreshServerInfo();
     }
   }
 
-  function closeModals() { modals.forEach(function (m) { m.hidden = true; }); }
+  function closeModals() {
+    modals.forEach(function (m) {
+      if (m === el.roomModal && roomRequired) return; // first-time setup must be finished
+      m.hidden = true;
+    });
+  }
 
   function anyModalOpen() { return modals.some(function (m) { return !m.hidden; }); }
 
@@ -894,18 +1130,30 @@
     return first ? first.url : location.origin + '/';
   }
 
+  var INTRO_SERVER = el.connectIntro.innerHTML;
+  var INTRO_CLOUD = 'Abra este endereço em qualquer aparelho <strong>com internet</strong> (não precisa ser a mesma rede) ou aponte a câmera para o QR code:';
+
   function renderConnect() {
     var local = conn === 'local';
     el.connectServer.hidden = local;
     el.connectLocal.hidden = !local;
+    el.setupCloud.hidden = !(local && location.protocol !== 'file:' && window.Cloud);
     if (!local) {
-      var url = shareUrl();
-      setText(el.shareUrl, url.replace(/\/$/, ''));
+      var url = cloudMode ? shareLink() : shareUrl();
+      el.connectIntro.innerHTML = cloudMode ? INTRO_CLOUD : INTRO_SERVER;
+      el.shareUrl.classList.toggle('long', cloudMode);
+      setText(el.shareUrl, cloudMode ? url : url.replace(/\/$/, ''));
       if (url !== qrFor && window.qrcode) {
         el.qr.innerHTML = qrSvg(url);
         qrFor = url;
       }
-      var others = (serverInfo && serverInfo.addresses || []).filter(function (a) { return a.url !== url; });
+      el.cloudExtras.hidden = !cloudMode;
+      if (cloudMode) {
+        setText(el.roomCode, Cloud.formatRoom(cloud.room));
+        el.cloudProblem.hidden = !cloud.problem;
+        setText(el.cloudProblem, cloud.problem);
+      }
+      var others = cloudMode ? [] : (serverInfo && serverInfo.addresses || []).filter(function (a) { return a.url !== url; });
       el.otherUrls.hidden = !others.length;
       el.otherUrls.textContent = '';
       if (others.length) {
@@ -1078,8 +1326,31 @@
       el.titleInput.blur();
     });
 
-    el.statusBtn.addEventListener('click', function () { openModal(el.connectModal); });
-    el.connectBtn.addEventListener('click', function () { openModal(el.connectModal); });
+    el.statusBtn.addEventListener('click', function () {
+      if (conn === 'setup') openRoomDialog(true);
+      else openModal(el.connectModal);
+    });
+    el.connectBtn.addEventListener('click', function () {
+      if (conn === 'setup') openRoomDialog(true);
+      else openModal(el.connectModal);
+    });
+    el.changeRoomBtn.addEventListener('click', function () { openRoomDialog(false); });
+    el.setupCloudBtn.addEventListener('click', function () {
+      loadCloudSettings();
+      openRoomDialog(false);
+    });
+    el.roomCreateBtn.addEventListener('click', function () { chooseRoom(Cloud.newRoom()); });
+    el.roomJoinForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var room = Cloud.cleanRoom(el.roomInput.value);
+      if (!room) {
+        showRoomError('Código inválido: são 8 letras e números, como K7M2-Q9XR.');
+        el.roomInput.focus();
+        return;
+      }
+      chooseRoom(room);
+    });
+    el.roomLocalBtn.addEventListener('click', useOnlyThisDevice);
     el.settingsBtn.addEventListener('click', function () { openModal(el.settingsModal); });
     el.soundBtn.addEventListener('click', function () { setSound(!prefs.sound); });
     el.fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -1120,7 +1391,8 @@
       prefs.name = Core.cleanText(el.nameInput.value, Core.MAX_NAME);
       el.nameInput.value = prefs.name;
       savePrefs();
-      if (link && link.open) link.open(); // reconnect so others see the new name
+      if (link && link.rename) link.rename(); // the room's device list updates by itself
+      else if (link && link.open) link.open(); // reconnect so others see the new name
       else if (conn === 'local') setDevices([{ id: clientId, name: deviceName(), since: Date.now() }]);
     });
 
@@ -1144,9 +1416,13 @@
   }
 
   function onVisible() {
-    if (document.hidden) return;
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      return;
+    }
     soundPrev = null; // never ring for something that happened while away
     if (link && link.wake) link.wake();
+    hiddenAt = 0;
     updateWakeLock();
     kick();
   }
