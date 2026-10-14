@@ -47,7 +47,7 @@ const ACTION_LABEL = {
   start: 'iniciar', pause: 'pausar', reset: 'zerar', restart: 'reiniciar', set: 'definir tempo',
   adjust: 'ajustar tempo', lap: 'marcar volta', mode: 'trocar tela', title: 'título',
   message: 'mensagem', settings: 'ajustes', select: 'escolher apresentação', finish: 'registrar tempo',
-  clearResult: 'apagar tempo registrado'
+  clearResult: 'apagar tempo registrado', alert: 'aviso automático'
 };
 
 function createTimerServer(options) {

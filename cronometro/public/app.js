@@ -669,7 +669,7 @@
 
   function renderMessage(meta) {
     var m = state.message;
-    el.banner.hidden = !m.text;
+    el.banner.hidden = !bannerShown(serverNow());
     setText(el.bannerText, m.text);
     el.clearMessageBtn.disabled = !m.text;
     var isNew = shownMessageId !== null && m.id !== shownMessageId && !meta.snapshot;
@@ -680,6 +680,12 @@
       void el.banner.offsetWidth; // restart the animation
       el.banner.classList.add('flash');
     }
+  }
+
+  // Automatic messages fade out by themselves; typed ones stay until cleared.
+  function bannerShown(now) {
+    var m = state.message;
+    return !!m.text && !(m.until && now >= m.until);
   }
 
   var lapsKey = null;
@@ -747,7 +753,10 @@
   }
   var lastCurrent = null;
 
-  function itemMs(item) { return Math.round(item.min * MINUTE); }
+  function isVideo(item) { return !!(planCats[item.cat] && planCats[item.cat].video); }
+  // The slot of one presentation: its own time, else its category's standard time.
+  function itemMs(item) { return Math.round((item.min || (planCats[item.cat] && planCats[item.cat].min) || 0) * MINUTE); }
+  function timed() { return planItems.filter(function (i) { return !isVideo(i); }); }
   function mmss(ms) { return Core.clockText(Math.floor(ms / SECOND)); }
   function pointsText(n) { return n + (n === 1 ? ' ponto' : ' pontos'); }
   function resultOf(item) { return (state.agenda && state.agenda.results[item.id]) || null; }
@@ -783,7 +792,7 @@
     var start = cur ? planItems.findIndex(function (i) { return i.id === cur; }) + 1 : 0;
     for (var k = 0; k < planItems.length; k++) {
       var item = planItems[(start + k) % planItems.length];
-      if (!resultOf(item) && item.id !== cur) return item;
+      if (!isVideo(item) && !resultOf(item) && item.id !== cur) return item;
     }
     return null;
   }
@@ -819,9 +828,13 @@
       b.appendChild(dot);
     }
     b.appendChild(document.createTextNode(label));
-    var done = items.filter(function (i) { return resultOf(i); }).length;
     var small = document.createElement('small');
-    small.textContent = done + '/' + items.length;
+    if (cat && cat.video) {
+      small.textContent = 'vídeo';
+    } else {
+      var own = items.filter(function (i) { return !isVideo(i); });
+      small.textContent = own.filter(function (i) { return resultOf(i); }).length + '/' + own.length;
+    }
     b.appendChild(small);
     return b;
   }
@@ -871,10 +884,11 @@
     el.agList.textContent = '';
     visibleItems().forEach(function (item) {
       var li = document.createElement('li');
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'ag-item';
-      b.setAttribute('data-id', item.id);
+      var video = isVideo(item);
+      var b = document.createElement(video ? 'div' : 'button');
+      if (!video) b.type = 'button';
+      b.className = video ? 'ag-item ag-video' : 'ag-item';
+      if (!video) b.setAttribute('data-id', item.id);
       var st = itemStatus(item);
       if (state.agenda.current === item.id) b.classList.add('current');
       if (st === 'ok' || st === 'penalizada') b.classList.add('done');
@@ -886,13 +900,13 @@
       var name = document.createElement('strong');
       name.textContent = item.nome;
       var lead = document.createElement('small');
-      lead.textContent = item.lider + ' · ' + Core.durationLabel(itemMs(item));
+      lead.textContent = video ? item.lider + ' · vídeo, sem cronômetro' : item.lider + ' · ' + Core.durationLabel(itemMs(item));
       text.appendChild(name);
       text.appendChild(lead);
       b.appendChild(time);
       b.appendChild(badgeEl(planCats[item.cat]));
       b.appendChild(text);
-      var chip = stateChip(item);
+      var chip = video ? null : stateChip(item);
       if (chip) b.appendChild(chip);
       li.appendChild(b);
       el.agList.appendChild(li);
@@ -936,17 +950,18 @@
     var done = 0;
     var penalized = 0;
     var lost = 0;
-    planItems.forEach(function (item) {
+    var own = timed();
+    own.forEach(function (item) {
       var r = resultOf(item);
       if (!r) return;
       done++;
       if (r.points) penalized++;
       lost += r.points;
     });
-    setText(el.doneCount, done + '/' + planItems.length);
-    setText(el.resSummary, 'Registradas ' + done + ' de ' + planItems.length + ' · Com penalização ' + penalized + ' · Pontos perdidos ' + lost);
+    setText(el.doneCount, done + '/' + own.length);
+    setText(el.resSummary, 'Registradas ' + done + ' de ' + own.length + ' · Com penalização ' + penalized + ' · Pontos perdidos ' + lost);
     el.resList.textContent = '';
-    visibleItems().forEach(function (item) {
+    visibleItems().filter(function (item) { return !isVideo(item); }).forEach(function (item) {
       var r = resultOf(item);
       var li = document.createElement('li');
       li.className = 'res-row';
@@ -998,6 +1013,25 @@
       li.appendChild(end);
       el.resList.appendChild(li);
     });
+  }
+
+  // Half time and one minute left: every screen notices, the first to ask gets the
+  // message on all of them (the shared state accepts it once per presentation).
+  var alertTried = { half: 0, last: 0 };
+  function checkAlerts(tv) {
+    if (!PLAN || !tv.running || (conn !== 'online' && conn !== 'local')) return;
+    var a = agendaNow();
+    if (!a.item || a.registered || isVideo(a.item)) return;
+    var sent = state.agenda.sent || {};
+    var left = tv.remaining;
+    var kind = null;
+    if (!sent.half && tv.duration > 2 * MINUTE && left <= tv.duration / 2 && left > MINUTE) kind = 'half';
+    else if (!sent.last && left <= MINUTE && left > 0) kind = 'last';
+    var wall = Date.now();
+    if (!kind || wall - alertTried[kind] < 2500) return;
+    alertTried[kind] = wall;
+    var text = kind === 'half' ? 'Metade do tempo: faltam ' + Math.round(tv.duration / 2 / MINUTE) + ' minutos' : 'Falta 1 minuto';
+    dispatch({ type: 'alert', kind: kind, text: text });
   }
 
   // Seen from the buttons: start/pause, stop and register, reset, next.
@@ -1054,7 +1088,8 @@
   }
 
   function resultRows() {
-    return planItems.map(function (item, i) {
+    return timed().map(function (item) {
+      var i = planItems.indexOf(item);
       var r = resultOf(item);
       var st = itemStatus(item);
       var situation = st === 'andamento' ? 'Em andamento' : st === 'ok' ? 'Sem penalização' : st === 'penalizada' ? 'Com penalização' : 'Pendente';
@@ -1170,6 +1205,12 @@
     var tv = Core.timerView(state, now);
     var sv = Core.stopwatchView(state, now);
     timerSounds(tv);
+    checkAlerts(tv);
+    var shown = bannerShown(now);
+    if (el.banner.hidden === shown) {
+      el.banner.hidden = !shown;
+      needFit = true;
+    }
 
     var isTimer = state.mode === 'timer';
     var view = isTimer ? tv : sv;
@@ -1502,7 +1543,8 @@
   // Tells the people at the controls what someone else just did.
   function announce(last) {
     if (!last || !last.by || last.by.id === clientId || prefs.display) return;
-    toast(describeAction(last));
+    var text = describeAction(last);
+    if (text) toast(text);
   }
 
   function describeAction(last) {
@@ -1523,6 +1565,7 @@
       case 'select': return 'Apresentação escolhida por ' + who;
       case 'finish': return 'Tempo registrado por ' + who + ': ' + mmss(last.ms || 0);
       case 'clearResult': return 'Tempo apagado por ' + who;
+      case 'alert': return '';
       default: return 'Atualizado por ' + who;
     }
   }

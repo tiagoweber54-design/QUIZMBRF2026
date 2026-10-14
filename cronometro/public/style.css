@@ -880,6 +880,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .ag-item .ag-text { min-width: 0; }
 .ag-item .ag-text strong { display: block; font-size: 16px; line-height: 1.2; overflow-wrap: anywhere; }
 .ag-item .ag-text small { display: block; color: var(--muted); font-size: 13.5px; }
+.ag-item.ag-video { min-height: 48px; opacity: 0.5; cursor: default; border-style: dashed; }
 .ag-item.current { border-color: var(--info); background: rgba(10, 132, 255, 0.12); }
 .ag-item.done { opacity: 0.78; }
 .chip-state {

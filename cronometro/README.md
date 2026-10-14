@@ -75,10 +75,16 @@ O tempo fica guardado num banco de dados gratuito do **Firebase** (Google). O si
             "text": { ".validate": "newData.isString() && newData.val().length <= 280" },
             "flash": { ".validate": "newData.isBoolean()" },
             "id": { ".validate": "newData.isNumber()" },
+            "until": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           },
           "agenda": {
             "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "sent": {
+              "half": { ".validate": "newData.isBoolean()" },
+              "last": { ".validate": "newData.isBoolean()" },
+              "$other": { ".validate": false }
+            },
             "results": {
               "$id": {
                 ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",
@@ -205,7 +211,7 @@ Cada aparelho liga ou desliga o próprio som, sem mexer nos outros. Quando algu�
 
 ## Modo seminário: apresentações, tempos e penalidades
 
-A aba **Apresentações** traz a programação do seminário (arquivo `public/programacao.js`), na ordem do papel, com as categorias **Case 5S**, **CIQ PDCA**, **Kaizen** e **Paródia**.
+A aba **Apresentações** traz a programação do seminário (arquivo `public/programacao.js`), na ordem do papel, com as categorias **Case 5S** (8 minutos), **CIQ PDCA** (12 minutos) e **Kaizen** (12 minutos). A **Paródia** é vídeo: aparece apagada na lista, para marcar a ordem, mas não tem cronômetro, nem pontos, nem entra na aba Tempos.
 
 **Quem cuida do tempo:**
 1. Toque numa categoria (ou em **Todas**) para ver só aquelas apresentações, sempre na ordem do seminário.
@@ -213,6 +219,8 @@ A aba **Apresentações** traz a programação do seminário (arquivo `public/pr
 3. **Iniciar**. Dá para **Pausar** e **Continuar** quantas vezes precisar.
 4. **Parar** (ou a tecla **P**) encerra e **registra** o tempo usado. Só o Parar registra.
 5. Aparece o botão **Próxima: …**, que já escolhe a seguinte da fila.
+
+**Mensagens automáticas:** em todas as telas aparece, em amarelo e piscando, **"Metade do tempo: faltam N minutos"** quando passa a metade (4 min no Case 5S, 6 min no CIQ PDCA e no Kaizen) e **"Falta 1 minuto"** quando falta 1 minuto. Cada uma aparece uma vez por apresentação e some sozinha depois de uns 12 segundos. As mensagens que você digita continuam até limpar.
 
 **Pontos:** cada minuto **completo** acima do tempo custa **1 ponto**. Até 59 segundos acima, não perde nada. Passou de −01:00, são 1 ponto; de −02:00, 2 pontos; e assim por diante. Enquanto o tempo estoura, a tela já mostra "Penalidade: −N pontos".
 
@@ -226,11 +234,11 @@ A aba **Apresentações** traz a programação do seminário (arquivo `public/pr
 
 Os tempos ficam guardados na sala (no Firebase, ou no servidor local). Qualquer aparelho vê a mesma tabela, e ela continua lá se você recarregar a página.
 
-**Para mudar nomes, tempos ou a ordem**, edite `cronometro/public/programacao.js` (no GitHub: abra o arquivo, ícone de lápis, **Commit changes**). O campo `min` é o tempo de cada apresentação em minutos. Se você mudar a regra de pontos, ela está em `public/core.js` (`PENALTY_MS` e `PENALTY_POINTS`).
+**Para mudar nomes, tempos ou a ordem**, edite `cronometro/public/programacao.js` (no GitHub: abra o arquivo, ícone de lápis, **Commit changes**). Os tempos padrão (`min`) ficam em cada categoria; para uma apresentação ter um tempo diferente, ponha `min: 10` (em minutos) nela. Se você mudar a regra de pontos, ela está em `public/core.js` (`PENALTY_MS` e `PENALTY_POINTS`).
 
 **A aba Livre** é o cronômetro/temporizador comum, sem programação. Escolher um tempo livre tira o nome da apresentação das telas.
 
-> **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos.
+> **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos e as mensagens automáticas.
 
 ## Problemas comuns (pela internet)
 
