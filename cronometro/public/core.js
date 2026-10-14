@@ -23,6 +23,10 @@
   var MAX_NAME = 40;
   var MAX_RESULTS = 200;
   var ID_PATTERN = /^[a-z0-9-]{1,24}$/; // keep in step with firebase-rules.json
+  // What the operator can put on the big screen by hand (see apply 'screen').
+  var SCREEN_PATTERN = /^(logo|timer|parodia(:[a-z0-9-]{1,24})?|rank:[a-z0-9-]{1,24})$/;
+  var WARN_AT = 3 * MINUTE;   // the clock turns yellow
+  var DANGER_AT = 30 * SECOND; // ...and red
 
   // Seminar rule: every FULL minute over the limit costs one point.
   var PENALTY_MS = 60 * SECOND;
@@ -37,12 +41,13 @@
       title: '',
       timer: { base: 5 * MINUTE, duration: 5 * MINUTE, elapsed: 0, startedAt: null },
       stopwatch: { elapsed: 0, startedAt: null, laps: [] },
-      settings: { warnAt: 2 * MINUTE, dangerAt: 1 * MINUTE, overtime: true },
+      settings: { warnAt: WARN_AT, dangerAt: DANGER_AT, overtime: true },
       message: { text: '', flash: false, id: 0 },
-      // Seminar: the presentation on the clock, which automatic messages it already got
-      // (sent.half / sent.last) and what was registered for each one
+      // Seminar: the presentation on the clock, what the big screen was told to show by
+      // hand (screen; null = decide by itself, see screenOf), which automatic messages the
+      // presentation already got (sent.half / sent.last) and what was registered for each one
       // (results[id] = { used, allowed, points, at, by }, all times in ms).
-      agenda: { current: null, sent: {}, results: {} },
+      agenda: { current: null, screen: null, sent: {}, results: {} },
       last: null // last change: { type, target, ms, by: { id, name }, at }
     };
   }
@@ -87,6 +92,28 @@
   // Points lost for finishing `overMs` past the limit: 1 per full minute.
   function penaltyPoints(overMs) {
     return overMs > 0 ? Math.floor(overMs / PENALTY_MS) * PENALTY_POINTS : 0;
+  }
+
+  /*
+   * What the big screen shows: { name, arg }
+   *   logo     the company logo on white (nothing is going on)
+   *   call     announcing the presentation that was picked, before its clock starts
+   *   timer    the clock
+   *   parodia  the video category (arg: id of the one playing, or '')
+   *   rank     the results board (arg: category id, or 'all')
+   * The operator can force one with the 'screen' command; otherwise it follows the clock.
+   */
+  function screenOf(state) {
+    var a = state.agenda || {};
+    var t = state.timer;
+    if (a.screen) {
+      var i = a.screen.indexOf(':');
+      var name = i < 0 ? a.screen : a.screen.slice(0, i);
+      return { name: name, arg: i < 0 ? '' : a.screen.slice(i + 1) };
+    }
+    var going = t.startedAt != null || t.elapsed > 0;
+    if (a.current) return { name: going ? 'timer' : 'call', arg: a.current };
+    return { name: going || state.mode === 'stopwatch' ? 'timer' : 'logo', arg: '' };
   }
 
   // The current presentation was stopped and its time registered (and not touched since).
@@ -146,6 +173,7 @@
 
     var ag = raw.agenda && typeof raw.agenda === 'object' ? raw.agenda : {};
     s.agenda.current = typeof ag.current === 'string' && ID_PATTERN.test(ag.current) ? ag.current : null;
+    s.agenda.screen = typeof ag.screen === 'string' && SCREEN_PATTERN.test(ag.screen) ? ag.screen : null;
     if (ag.sent && typeof ag.sent === 'object') {
       if (ag.sent.half === true) s.agenda.sent.half = true;
       if (ag.sent.last === true) s.agenda.sent.last = true;
@@ -194,6 +222,8 @@
    *   { type: 'settings', warnAt?, dangerAt?, overtime? }
    *   { type: 'select', id, ms, force? } seminar: put a presentation on the clock (ms = its limit)
    *   { type: 'finish' }                 seminar: stop it and register the time used and the points lost
+   *   { type: 'screen', name }          seminar: what the big screen shows: 'logo', 'timer', 'parodia', 'parodia:<id>',
+   *                                      'rank:<category|all>', or '' to let it follow the presentation (see screenOf)
    *   { type: 'alert', kind, text }      seminar: automatic message at half time ('half') and one minute left ('last');
    *                                      accepted once per presentation, only at the right moment
    *   { type: 'clearResult', id }        seminar: forget a registered time ('*' = all of them)
@@ -201,7 +231,7 @@
   function apply(state, cmd, now, by) {
     if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return state;
     var next = clone(state);
-    if (!next.agenda) next.agenda = { current: null, sent: {}, results: {} };
+    if (!next.agenda) next.agenda = { current: null, screen: null, sent: {}, results: {} };
     if (!next.agenda.sent) next.agenda.sent = {};
     var t = next.timer;
     var w = next.stopwatch;
@@ -217,6 +247,7 @@
       case 'mode':
         if ((cmd.mode === 'timer' || cmd.mode === 'stopwatch') && cmd.mode !== next.mode) {
           next.mode = cmd.mode;
+          if (!next.agenda.current) next.agenda.screen = 'timer'; // a free clock is meant to be seen
           changed = true;
         }
         target = next.mode;
@@ -231,6 +262,7 @@
             : w.elapsed < MAX_MS;
           if (canRun) {
             clock.startedAt = now;
+            next.agenda.screen = null; // starting brings the clock to the big screen
             changed = true;
           }
         }
@@ -269,6 +301,7 @@
         else w.laps = [];
         clock.elapsed = 0;
         clock.startedAt = now;
+        next.agenda.screen = null;
         changed = true;
         break;
 
@@ -282,6 +315,7 @@
         t.startedAt = cmd.start === true ? now : null;
         next.agenda.current = null; // a free countdown is no presentation
         next.agenda.sent = {};
+        next.agenda.screen = 'timer'; // ...but whoever sets it wants to see it
         target = 'timer';
         changed = true;
         break;
@@ -298,6 +332,7 @@
         var newLeft = clamp(Math.max(left, 0) + ms, 0, MAX_MS);
         if (newLeft === left) break;
         t.duration = spent + newLeft;
+        if (!next.agenda.current) next.agenda.screen = 'timer';
         target = 'timer';
         changed = true;
         break;
@@ -311,8 +346,11 @@
         if (next.agenda.current && !isRegistered(next) && (t.startedAt != null || t.elapsed > 0) && cmd.force !== true) break;
         next.agenda.current = value;
         next.agenda.sent = {};
+        next.agenda.screen = null; // the big screen announces the presentation until the clock starts
         next.mode = 'timer';
         next.settings.overtime = true; // the time over the limit is what costs points
+        next.settings.warnAt = WARN_AT;
+        next.settings.dangerAt = DANGER_AT;
         t.base = ms;
         t.duration = ms;
         t.elapsed = 0;
@@ -374,6 +412,16 @@
         // A new id on every send, so repeating a message flashes it again.
         next.message = { text: value, flash: value !== '' && cmd.flash === true, id: next.message.id + 1 };
         changed = true;
+        break;
+
+      case 'screen':
+        value = typeof cmd.name === 'string' && (cmd.name === '' || SCREEN_PATTERN.test(cmd.name)) ? cmd.name : null;
+        if (value === null) break;
+        if ((value || null) !== next.agenda.screen) {
+          next.agenda.screen = value || null;
+          changed = true;
+        }
+        target = 'timer';
         break;
 
       case 'alert':
@@ -531,6 +579,10 @@
     ID_PATTERN: ID_PATTERN,
     penaltyPoints: penaltyPoints,
     isRegistered: isRegistered,
+    screenOf: screenOf,
+    SCREEN_PATTERN: SCREEN_PATTERN,
+    WARN_AT: WARN_AT,
+    DANGER_AT: DANGER_AT,
     initialState: initialState,
     normalize: normalize,
     apply: apply,

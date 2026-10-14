@@ -80,6 +80,7 @@ O tempo fica guardado num banco de dados gratuito do **Firebase** (Google). O si
           },
           "agenda": {
             "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "screen": { ".validate": "newData.isString() && newData.val().matches(/^(logo|timer|parodia(:[a-z0-9-]{1,24})?|rank:[a-z0-9-]{1,24})$/)" },
             "sent": {
               "half": { ".validate": "newData.isBoolean()" },
               "last": { ".validate": "newData.isBoolean()" },
@@ -211,7 +212,7 @@ Cada aparelho liga ou desliga o próprio som, sem mexer nos outros. Quando algu�
 
 ## Modo seminário: apresentações, tempos e penalidades
 
-A aba **Apresentações** traz a programação do seminário (arquivo `public/programacao.js`), na ordem do papel, com as categorias **Case 5S** (8 minutos), **CIQ PDCA** (12 minutos) e **Kaizen** (12 minutos). A **Paródia** é vídeo: aparece apagada na lista, para marcar a ordem, mas não tem cronômetro, nem pontos, nem entra na aba Tempos.
+A aba **Apresentações** traz a programação do seminário (arquivo `public/programacao.js`), na ordem do papel, com as categorias **Case 5S** (8 minutos), **CIQ PDCA** (12 minutos) e **Kaizen** (12 minutos). A **Paródia** é vídeo: aparece na lista com borda tracejada, para marcar a ordem; não tem cronômetro, nem pontos, nem entra na aba Tempos (tocar nela só mostra "PARÓDIA" no tablet).
 
 **Quem cuida do tempo:**
 1. Toque numa categoria (ou em **Todas**) para ver só aquelas apresentações, sempre na ordem do seminário.
@@ -219,6 +220,14 @@ A aba **Apresentações** traz a programação do seminário (arquivo `public/pr
 3. **Iniciar**. Dá para **Pausar** e **Continuar** quantas vezes precisar.
 4. **Parar** (ou a tecla **P**) encerra e **registra** o tempo usado. Só o Parar registra.
 5. Aparece o botão **Próxima: …**, que já escolhe a seguinte da fila.
+
+**O que aparece no tablet (tela grande):** deixe o tablet em **modo exibição** (botão do monitor no alto, ou a tecla **E**; no iPad, "Adicionar à Tela de Início" abre sem barras). Ele mostra sozinho, na ordem:
+1. **Logo da MBRF** em fundo branco, quando nada está acontecendo.
+2. Ao tocar numa apresentação: **logo, categoria e o nome do grupo bem grande**, com uma **bordinha na cor da categoria** (roxo no Kaizen, azul no CIQ PDCA, verde no Case 5S). O tema e o tempo aparecem menores.
+3. Ao tocar em **Iniciar**: a chamada some devagar (fade) e entra o **cronômetro**, que fica **amarelo** quando faltam 3 minutos e **vermelho** aos 30 segundos. Ao estourar, a **tela vermelha piscando**.
+4. Ao **Parar**, o tempo fica registrado na tela.
+
+No painel **No tablet agora** (abas Apresentações e Tempos) você manda o que quiser para o tablet: **Automática** (segue a apresentação), **Logo MBRF**, **Paródia** (escrito "PARÓDIA" bem grande, bordinha laranja; também dá para tocar direto na paródia da lista, que mostra o nome de quem apresenta) e **Mostrar os tempos** (**Case 5S**, **CIQ PDCA**, **Kaizen** ou **Total**): um quadro com todos os tempos e os pontos perdidos, quem perdeu menos pontos em cima e quem ainda não apresentou no fim. Tocar de novo no botão que está aceso volta para o automático. Iniciar ou escolher outra apresentação também tira o quadro da tela.
 
 **Mensagens automáticas:** em todas as telas aparece, em amarelo e piscando, **"Metade do tempo: faltam N minutos"** quando passa a metade (4 min no Case 5S, 6 min no CIQ PDCA e no Kaizen) e **"Falta 1 minuto"** quando falta 1 minuto. Cada uma aparece uma vez por apresentação e some sozinha depois de uns 12 segundos. As mensagens que você digita continuam até limpar.
 
@@ -238,7 +247,7 @@ Os tempos ficam guardados na sala (no Firebase, ou no servidor local). Qualquer 
 
 **A aba Livre** é o cronômetro/temporizador comum, sem programação. Escolher um tempo livre tira o nome da apresentação das telas.
 
-> **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos e as mensagens automáticas.
+> **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4, ou o arquivo `regras-firebase.txt`) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos e as mensagens automáticas.
 
 ## Problemas comuns (pela internet)
 

@@ -1,0 +1,94 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "salas": {
+      "$sala": {
+        ".read": "$sala.matches(/^[A-Z0-9]{8}$/)",
+        ".write": "$sala.matches(/^[A-Z0-9]{8}$/)",
+        "estado": {
+          ".validate": "newData.hasChildren(['rev', 'mode', 'timer', 'stopwatch', 'settings', 'message'])",
+          "v": { ".validate": "newData.isNumber()" },
+          "rev": { ".validate": "newData.isNumber()" },
+          "mode": { ".validate": "newData.val() === 'timer' || newData.val() === 'stopwatch'" },
+          "title": { ".validate": "newData.isString() && newData.val().length <= 160" },
+          "timer": {
+            ".validate": "newData.hasChildren(['base', 'duration', 'elapsed'])",
+            "base": { ".validate": "newData.isNumber()" },
+            "duration": { ".validate": "newData.isNumber()" },
+            "elapsed": { ".validate": "newData.isNumber()" },
+            "startedAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          },
+          "stopwatch": {
+            ".validate": "newData.hasChild('elapsed')",
+            "elapsed": { ".validate": "newData.isNumber()" },
+            "startedAt": { ".validate": "newData.isNumber()" },
+            "laps": {
+              "$i": { ".validate": "$i.matches(/^[0-9]{1,2}$/) && newData.isNumber()" }
+            },
+            "$other": { ".validate": false }
+          },
+          "settings": {
+            ".validate": "newData.hasChildren(['warnAt', 'dangerAt', 'overtime'])",
+            "warnAt": { ".validate": "newData.isNumber()" },
+            "dangerAt": { ".validate": "newData.isNumber()" },
+            "overtime": { ".validate": "newData.isBoolean()" },
+            "$other": { ".validate": false }
+          },
+          "message": {
+            ".validate": "newData.hasChildren(['text', 'flash', 'id'])",
+            "text": { ".validate": "newData.isString() && newData.val().length <= 280" },
+            "flash": { ".validate": "newData.isBoolean()" },
+            "id": { ".validate": "newData.isNumber()" },
+            "until": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          },
+          "agenda": {
+            "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "screen": { ".validate": "newData.isString() && newData.val().matches(/^(logo|timer|parodia(:[a-z0-9-]{1,24})?|rank:[a-z0-9-]{1,24})$/)" },
+            "sent": {
+              "half": { ".validate": "newData.isBoolean()" },
+              "last": { ".validate": "newData.isBoolean()" },
+              "$other": { ".validate": false }
+            },
+            "results": {
+              "$id": {
+                ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",
+                "used": { ".validate": "newData.isNumber()" },
+                "allowed": { ".validate": "newData.isNumber()" },
+                "points": { ".validate": "newData.isNumber()" },
+                "at": { ".validate": "newData.isNumber()" },
+                "by": { ".validate": "newData.isString() && newData.val().length <= 80" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          },
+          "last": {
+            "type": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "target": { ".validate": "newData.isString() && newData.val().length <= 20" },
+            "ms": { ".validate": "newData.isNumber()" },
+            "at": { ".validate": "newData.isNumber()" },
+            "by": {
+              "id": { ".validate": "newData.isString() && newData.val().length <= 128" },
+              "name": { ".validate": "newData.isString() && newData.val().length <= 80" },
+              "$other": { ".validate": false }
+            },
+            "$other": { ".validate": false }
+          },
+          "$other": { ".validate": false }
+        },
+        "aparelhos": {
+          "$id": {
+            ".validate": "$id.length <= 128 && newData.hasChild('nome')",
+            "nome": { ".validate": "newData.isString() && newData.val().length <= 80" },
+            "desde": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
+          }
+        },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

@@ -92,6 +92,34 @@
     </div>
     <div class="progress" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
     <div id="sub" class="sub">Pronto</div>
+
+    <!-- Seminar screens: lie over the clock and fade in and out (see renderScreens in app.js). -->
+    <div id="screens" class="screens" aria-hidden="true">
+      <section id="scrLogo" class="scr scr-logo">
+        <img class="scr-logo-big" src="logo-mbrf.png" alt="MBRF">
+      </section>
+      <section id="scrCall" class="scr scr-call">
+        <div class="scr-frame"></div>
+        <img class="scr-logo-top" src="logo-mbrf.png" alt="MBRF">
+        <div id="callCat" class="call-cat"></div>
+        <div id="callLead" class="call-lead fit"></div>
+        <div id="callName" class="call-name fit"></div>
+        <div id="callTime" class="call-time"></div>
+      </section>
+      <section id="scrParodia" class="scr scr-parodia">
+        <div class="scr-frame"></div>
+        <img class="scr-logo-top" src="logo-mbrf.png" alt="MBRF">
+        <div id="parWord" class="par-word fit">PARÓDIA</div>
+        <div id="parWho" class="par-who fit"></div>
+      </section>
+      <section id="scrRank" class="scr scr-rank">
+        <div class="scr-frame"></div>
+        <img class="scr-logo-top" src="logo-mbrf.png" alt="MBRF">
+        <h2 id="rankTitle" class="rank-title"></h2>
+        <ol id="rankList" class="rank-list"></ol>
+        <div id="rankFoot" class="rank-foot"></div>
+      </section>
+    </div>
   </main>
 
   <section id="controls" class="controls" aria-label="Controles">
@@ -128,6 +156,17 @@
           <button type="button" id="agUndoBtn" class="btn btn-small btn-quiet" hidden>Desfazer a parada</button>
           <button type="button" id="agNextBtn" class="btn btn-small btn-accent grow" hidden></button>
         </div>
+      </div>
+
+      <div class="panel panel-screen" data-views="apres tempos">
+        <h2 class="panel-title">No tablet agora: <span id="scrNow">—</span></h2>
+        <div id="scrPicker" class="chips scr-picker" role="group" aria-label="Escolher o que aparece na tela grande">
+          <button type="button" class="chip" data-screen="">Automática</button>
+          <button type="button" class="chip" data-screen="logo">Logo MBRF</button>
+          <button type="button" class="chip" data-screen="parodia">Paródia</button>
+        </div>
+        <h3 class="panel-sub">Mostrar os tempos</h3>
+        <div id="scrRankPicker" class="chips scr-picker" role="group" aria-label="Mostrar os tempos na tela grande"></div>
       </div>
 
       <div class="panel panel-agenda" data-views="apres">

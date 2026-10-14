@@ -55,9 +55,10 @@ function randomCommand(rand) {
   const target = pick(['timer', 'stopwatch']);
   const id = 'p' + String(1 + Math.floor(rand() * 25)).padStart(2, '0');
   switch (pick(['start', 'start', 'pause', 'reset', 'restart', 'set', 'adjust', 'adjust', 'lap', 'lap', 'mode', 'title', 'message', 'settings',
-    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult', 'alert', 'alert'])) {
+    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult', 'alert', 'alert', 'screen', 'screen'])) {
     case 'select': return { type: 'select', id, ms: (1 + Math.floor(rand() * 15)) * 60000, force: rand() < 0.5 };
     case 'finish': return { type: 'finish' };
+    case 'screen': return { type: 'screen', name: pick(['logo', 'timer', 'parodia', 'parodia:p08', 'rank:kaizen', 'rank:all', '']) };
     case 'alert': return { type: 'alert', kind: pick(['half', 'last']), text: pick(['Metade do tempo: faltam 4 minutos', 'Falta 1 minuto']) };
     case 'clearResult': return { type: 'clearResult', id: rand() < 0.1 ? '*' : id };
     case 'start': return { type: 'start', target };
@@ -138,6 +139,14 @@ test('the automatic messages (half time, last minute) are accepted', { skip }, a
   allowed(await put('salas/' + ROOM + '/estado', state), 'depois do aviso de 1 minuto');
 });
 
+test('every screen the operator can pick is accepted', { skip }, async () => {
+  for (const name of ['logo', 'timer', 'parodia', 'parodia:p08', 'rank:case5s', 'rank:ciq', 'rank:kaizen', 'rank:all']) {
+    const state = core.apply(core.initialState(), { type: 'screen', name }, 1700000000000, { id: 'op', name: 'iPhone' });
+    assert.equal(state.agenda.screen, name);
+    allowed(await put('salas/' + ROOM + '/estado', state), 'tela ' + name);
+  }
+});
+
 test('a full lap list (99 laps) is accepted', { skip }, async () => {
   let state = core.apply(core.initialState(), { type: 'mode', mode: 'stopwatch' }, 1700000000000, null);
   state = core.apply(state, { type: 'start', target: 'stopwatch' }, 1700000000000, null);
@@ -194,6 +203,10 @@ test('bad data inside a room is refused', { skip }, async () => {
   await bad(withAgenda({ results: { p01: { ...goodResult, by: 'n'.repeat(81) } } }), 'nome longo demais no resultado');
   await bad(withAgenda({ outro: 1 }), 'campo extra na agenda');
   await bad(withAgenda({ sent: { half: 'sim' } }), 'aviso enviado que não é verdadeiro/falso');
+  await bad(withAgenda({ screen: 'qualquer coisa' }), 'tela que não existe');
+  await bad(withAgenda({ screen: 'rank:' }), 'ranking sem categoria');
+  await bad(withAgenda({ screen: 'parodia:' + 'x'.repeat(25) }), 'id longo demais na tela');
+  await bad(withAgenda({ screen: 7 }), 'tela que não é texto');
   await bad(withAgenda({ sent: { half: true, extra: true } }), 'campo extra nos avisos enviados');
   await bad((s) => { s.message.until = 'amanhã'; }, 'validade da mensagem que não é número');
   await bad((s) => { s.message.until = 5; s.message.extra = 1; }, 'campo extra na mensagem');
