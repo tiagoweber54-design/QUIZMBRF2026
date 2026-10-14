@@ -1,17 +1,39 @@
-# Pescaria 3D — modelos dos peixes
+# Pescaria na Represa 3D
 
-Primeira etapa do jogo de pescaria realista em 3D: **30 espécies brasileiras**
-modeladas proceduralmente com [Three.js](https://threejs.org) (sem arquivos de modelo
-externos, tudo gerado em código).
+Jogo de pescaria realista em 3D com **30 espécies brasileiras** modeladas
+proceduralmente com [Three.js](https://threejs.org) (sem arquivos de modelo externos,
+tudo gerado em código).
 
-Abra `catalogo.html` por um servidor local (módulos ES não carregam via `file://`):
+Abra por um servidor local (módulos ES não carregam via `file://`):
 
 ```bash
 python3 -m http.server 8000
-# http://localhost:8000/jogo3d/catalogo.html
+# jogo:     http://localhost:8000/jogo3d/index.html
+# catálogo: http://localhost:8000/jogo3d/catalogo.html
 ```
 
-## Arquivos
+## O jogo (`index.html` + `jogo/`)
+
+- **Cenário**: represa com margem irregular, relevo, árvores, taboas, aguapés, plantas
+  submersas, paliteiros/galhadas e píer. Água com reflexo (modo alto) e céu físico com
+  ciclo de dia e noite (1 hora de jogo por minuto), lua, estrelas e clima variável.
+- **Pesca**: arremesso com força e mira, boia que belisca e afunda, chumbada de fundo ou
+  artificial recolhida com toques; fisgada no tempo certo.
+- **Briga**: freio da carretilha, tensão e resistência da linha, cansaço do peixe,
+  corridas, saltos, linha bamba, galhada e carretel esvaziando.
+- **Câmera subaquática** mostrando a isca e os peixes que se aproximam.
+- Cada espécie tem profundidade, iscas, horário de atividade, força e peso próprios
+  (`jogo/comportamento.js`). Caderno de pesca e pontos salvos no navegador.
+- Opção de gráficos leve para celulares.
+
+| Arquivo | O que faz |
+|---|---|
+| `jogo/main.js` | Estado do jogo, controles, vara e linha, IA dos peixes, briga, captura |
+| `jogo/mundo.js` | Terreno, água, céu, vegetação, píer e ciclo do dia |
+| `jogo/comportamento.js` | Comportamento de pesca das 30 espécies, iscas e linhas |
+| `jogo/som.js` | Sons sintetizados (carretilha, freio, respingos, pássaros, grilos) |
+
+## Modelos dos peixes
 
 | Arquivo | O que faz |
 |---|---|
