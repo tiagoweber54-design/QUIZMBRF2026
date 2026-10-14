@@ -83,7 +83,7 @@ test('in overtime, +1 min gives a full minute from now and −10 s does nothing'
   s = core.apply(s, { type: 'adjust', ms: 60000 }, T0 + 25000, me);
   v = core.timerView(s, T0 + 25000);
   assert.equal(v.remaining, 60000);
-  assert.equal(v.phase, 'danger'); // one minute left: red, with the default thresholds
+  assert.equal(v.phase, 'normal'); // the 3 min / 30 s marks are longer than this countdown, so they are skipped
 });
 
 test('with overtime off the countdown stops at zero and needs a restart', () => {
@@ -389,7 +389,7 @@ test('results survive a trip through the database', () => {
   assert.deepEqual(back.agenda.results.p07, s.agenda.results.p07);
   // an older state without any agenda still works
   const old = core.normalize({ rev: 3, timer: { base: 60000, duration: 60000, elapsed: 0 } });
-  assert.deepEqual(old.agenda, { current: null, sent: {}, results: {} });
+  assert.deepEqual(old.agenda, { current: null, screen: null, sent: {}, results: {} });
   // junk is dropped
   const junk = core.normalize({ agenda: { current: 'NOT OK!', results: { 'bad id': { used: 1, allowed: 1 }, p01: 'x', p02: { used: 5000, allowed: 'x' }, p03: { used: 5000, allowed: 60000, points: -3 } } } });
   assert.equal(junk.agenda.current, null);
@@ -457,4 +457,89 @@ test('a typed message replaces an automatic one and does not fade; flags and exp
   assert.deepEqual(back.agenda.sent, { half: true });
   assert.deepEqual(core.normalize({ agenda: { sent: { half: 'yes', last: 1, extra: true } } }).agenda.sent, {});
   assert.equal(core.normalize({ message: { text: '', until: T0 } }).message.until, undefined);
+});
+
+// ------------------------------------------------------------- big screen
+
+test('the big screen follows the presentation: logo, call, clock', () => {
+  const screen = (s) => core.screenOf(s).name;
+  let s = core.initialState();
+  assert.equal(screen(s), 'logo', 'nothing going on');
+  s = core.apply(s, { type: 'select', id: 'p01', ms: 480000 }, T0, me);
+  assert.deepEqual(core.screenOf(s), { name: 'call', arg: 'p01' }, 'picked, not started');
+  s = core.apply(s, { type: 'start', target: 'timer' }, T0 + 1000, me);
+  assert.deepEqual(core.screenOf(s), { name: 'timer', arg: 'p01' }, 'started');
+  s = core.apply(s, { type: 'pause', target: 'timer' }, T0 + 5000, me);
+  assert.equal(screen(s), 'timer', 'paused stays on the clock');
+  s = core.apply(s, { type: 'finish' }, T0 + 6000, me);
+  assert.equal(screen(s), 'timer', 'registered stays on the clock (shows the result)');
+  s = core.apply(s, { type: 'reset', target: 'timer' }, T0 + 7000, me);
+  assert.equal(screen(s), 'call', 'Zerar goes back to announcing it');
+});
+
+test('the operator can put the logo, the video screen or a ranking on the big screen', () => {
+  let s = core.apply(core.initialState(), { type: 'select', id: 'p01', ms: 480000 }, T0, me);
+  s = core.apply(s, { type: 'start', target: 'timer' }, T0, me);
+  const logo = core.apply(s, { type: 'screen', name: 'logo' }, T0 + 1000, me);
+  assert.deepEqual(core.screenOf(logo), { name: 'logo', arg: '' });
+  assert.equal(logo.agenda.current, 'p01', 'the presentation is still there');
+  assert.equal(core.timerView(logo, T0 + 5000).running, true, 'and its clock keeps running');
+  assert.equal(core.apply(logo, { type: 'screen', name: 'logo' }, T0 + 2000, me), logo, 'same screen: nothing changes');
+  assert.deepEqual(core.screenOf(core.apply(logo, { type: 'screen', name: '' }, T0 + 2000, me)), { name: 'timer', arg: 'p01' }, 'back to automatic');
+
+  assert.deepEqual(core.screenOf(core.apply(s, { type: 'screen', name: 'parodia' }, T0, me)), { name: 'parodia', arg: '' });
+  assert.deepEqual(core.screenOf(core.apply(s, { type: 'screen', name: 'parodia:p08' }, T0, me)), { name: 'parodia', arg: 'p08' });
+  assert.deepEqual(core.screenOf(core.apply(s, { type: 'screen', name: 'rank:kaizen' }, T0, me)), { name: 'rank', arg: 'kaizen' });
+  assert.deepEqual(core.screenOf(core.apply(s, { type: 'screen', name: 'rank:all' }, T0, me)), { name: 'rank', arg: 'all' });
+  for (const bad of ['rank', 'rank:', 'Rank:all', 'parodia:P08', 'other', 'logo ', 42, null, undefined]) {
+    assert.equal(core.apply(s, { type: 'screen', name: bad }, T0, me), s, String(bad));
+  }
+  // the clock, the next presentation or a free countdown bring the clock back
+  assert.equal(core.screenOf(core.apply(core.apply(s, { type: 'screen', name: 'rank:all' }, T0, me), { type: 'select', id: 'p02', ms: 60000, force: true }, T0, me)).name, 'call');
+  const idle = core.apply(core.initialState(), { type: 'screen', name: 'logo' }, T0, me);
+  assert.equal(core.screenOf(core.apply(idle, { type: 'start', target: 'timer' }, T0, me)).name, 'timer', 'Iniciar leaves the logo');
+  assert.equal(core.screenOf(core.apply(idle, { type: 'set', ms: 60000 }, T0, me)).name, 'timer', 'a free time shows the clock even before it starts');
+});
+
+test('a free timer or stopwatch still shows the clock; the logo is only for nothing going on', () => {
+  const free = core.apply(core.initialState(), { type: 'start', target: 'timer' }, T0, me);
+  assert.equal(core.screenOf(free).name, 'timer');
+  assert.equal(core.screenOf(core.apply(core.initialState(), { type: 'mode', mode: 'stopwatch' }, T0, me)).name, 'timer');
+  assert.equal(core.screenOf(core.apply(free, { type: 'reset', target: 'timer' }, T0 + 1000, me)).name, 'logo');
+});
+
+test('yellow at 3 minutes and red at 30 seconds, for every presentation', () => {
+  assert.equal(core.initialState().settings.warnAt, 180000);
+  assert.equal(core.initialState().settings.dangerAt, 30000);
+  // an older room that still has the old limits gets the seminar ones when a presentation is picked
+  const old = core.normalize({ settings: { warnAt: 120000, dangerAt: 60000, overtime: true } });
+  const s = core.apply(old, { type: 'select', id: 'p01', ms: 480000 }, T0, me);
+  assert.equal(s.settings.warnAt, 180000);
+  assert.equal(s.settings.dangerAt, 30000);
+  let run8 = core.apply(s, { type: 'start', target: 'timer' }, T0, me);
+  const phase = (leftSec) => core.timerView(run8, T0 + 480000 - leftSec * 1000).phase;
+  assert.equal(phase(200), 'normal');
+  assert.equal(phase(180), 'warn');
+  assert.equal(phase(31), 'warn');
+  assert.equal(phase(30), 'danger');
+  assert.equal(phase(1), 'danger');
+  assert.equal(core.timerView(run8, T0 + 480000).phase, 'over');
+});
+
+test('the screen choice survives the database', () => {
+  let s = core.apply(core.initialState(), { type: 'screen', name: 'parodia:p08' }, T0, me);
+  assert.equal(core.normalize(JSON.parse(JSON.stringify(s))).agenda.screen, 'parodia:p08');
+  assert.equal(core.normalize({ agenda: { screen: 'weird' } }).agenda.screen, null);
+  assert.equal(core.normalize({}).agenda.screen, null);
+});
+
+test('adjusting or switching an idle free clock shows it on the big screen', () => {
+  const idle = core.initialState();
+  assert.equal(core.screenOf(idle).name, 'logo');
+  assert.equal(core.screenOf(core.apply(idle, { type: 'adjust', ms: 10000 }, T0, me)).name, 'timer');
+  const sw = core.apply(core.apply(idle, { type: 'mode', mode: 'stopwatch' }, T0, me), { type: 'mode', mode: 'timer' }, T0, me);
+  assert.equal(core.screenOf(sw).name, 'timer');
+  // with a presentation picked, the call screen is not hidden by these
+  const picked = core.apply(idle, { type: 'select', id: 'p01', ms: 480000 }, T0, me);
+  assert.equal(core.screenOf(core.apply(picked, { type: 'adjust', ms: 10000 }, T0, me)).name, 'call');
 });

@@ -46,6 +46,7 @@
           },
           "agenda": {
             "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "screen": { ".validate": "newData.isString() && newData.val().matches(/^(logo|timer|parodia(:[a-z0-9-]{1,24})?|rank:[a-z0-9-]{1,24})$/)" },
             "sent": {
               "half": { ".validate": "newData.isBoolean()" },
               "last": { ".validate": "newData.isBoolean()" },

@@ -100,6 +100,8 @@
     'roomModal', 'roomClose', 'dbBlock', 'dbInput', 'roomCreateBtn', 'roomJoinForm', 'roomInput', 'roomError', 'roomLocalBtn',
     'agendaHead', 'agCat', 'agName', 'agLead', 'tabs', 'doneCount', 'nowEmpty', 'nowInfo', 'nowCat', 'nowLimit', 'nowName',
     'nowLead', 'agMainBtn', 'agMainLabel', 'agStopBtn', 'agResetBtn', 'nowResult', 'agUndoBtn', 'agNextBtn', 'agFilter',
+    'scrNow', 'scrPicker', 'scrRankPicker', 'screens', 'scrLogo', 'scrCall', 'scrParodia', 'scrRank', 'callCat', 'callLead',
+    'callName', 'callTime', 'parWord', 'parWho', 'rankTitle', 'rankList', 'rankFoot',
     'agList', 'resFilter', 'resSummary', 'resList', 'copyResultsBtn', 'csvBtn', 'clearResultsBtn'
   ].forEach(function (id) { el[id] = $(id); });
   var app = el.app;
@@ -660,6 +662,7 @@
     renderMessage(meta || {});
     renderLaps();
     renderAgenda();
+    renderScreens();
 
     syncSelect(el.warnSel, s.settings.warnAt);
     syncSelect(el.dangerSel, s.settings.dangerAt);
@@ -885,10 +888,11 @@
     visibleItems().forEach(function (item) {
       var li = document.createElement('li');
       var video = isVideo(item);
-      var b = document.createElement(video ? 'div' : 'button');
-      if (!video) b.type = 'button';
+      var b = document.createElement('button');
+      b.type = 'button';
       b.className = video ? 'ag-item ag-video' : 'ag-item';
-      if (!video) b.setAttribute('data-id', item.id);
+      b.setAttribute('data-id', item.id);
+      if (video && state.agenda.screen === 'parodia:' + item.id) b.classList.add('current');
       var st = itemStatus(item);
       if (state.agenda.current === item.id) b.classList.add('current');
       if (st === 'ok' || st === 'penalizada') b.classList.add('done');
@@ -900,13 +904,16 @@
       var name = document.createElement('strong');
       name.textContent = item.nome;
       var lead = document.createElement('small');
-      lead.textContent = video ? item.lider + ' · vídeo, sem cronômetro' : item.lider + ' · ' + Core.durationLabel(itemMs(item));
+      lead.textContent = video ? item.lider + ' · vídeo: toque para mostrar PARÓDIA no tablet' : item.lider + ' · ' + Core.durationLabel(itemMs(item));
       text.appendChild(name);
       text.appendChild(lead);
       b.appendChild(time);
       b.appendChild(badgeEl(planCats[item.cat]));
       b.appendChild(text);
       var chip = video ? null : stateChip(item);
+      if (video && b.classList.contains('current')) {
+        chip = textEl('span', 'chip-state run', 'No tablet');
+      }
       if (chip) b.appendChild(chip);
       li.appendChild(b);
       el.agList.appendChild(li);
@@ -1015,6 +1022,198 @@
     });
   }
 
+  // ----------------------------------------------------- big-screen views
+
+  var videoCat = PLAN ? PLAN.categorias.filter(function (c) { return c.video; })[0] || null : null;
+  var screenKey = '';
+  var shownScreen = '';
+
+  var SCREEN_LAYERS = { logo: 'scrLogo', call: 'scrCall', parodia: 'scrParodia', rank: 'scrRank' };
+
+  // Seminar order, except that the board puts who lost fewer points first and the
+  // presentations still to come last.
+  function rankRows(catId) {
+    return timed()
+      .filter(function (i) { return catId === 'all' || i.cat === catId; })
+      .map(function (item) { return { item: item, r: resultOf(item), order: planItems.indexOf(item) }; })
+      .sort(function (a, b) {
+        if (!a.r !== !b.r) return a.r ? -1 : 1;
+        if (a.r && a.r.points !== b.r.points) return a.r.points - b.r.points;
+        return a.order - b.order;
+      });
+  }
+
+  function textEl(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+
+  function renderRank(catId) {
+    var cat = planCats[catId] || null;
+    var rows = rankRows(catId);
+    var all = catId === 'all';
+    var color = cat ? cat.cor : '#1f3a5f';
+    el.scrRank.style.setProperty('--c', color);
+    setText(el.rankTitle, all ? 'Todas as apresentações' : cat.nome);
+    setClass(el.scrRank, 'two-cols', rows.length > 9);
+    el.rankList.style.setProperty('--n', String(Math.ceil(rows.length / (rows.length > 9 ? 2 : 1))));
+    el.rankList.textContent = '';
+    var lost = 0;
+    var done = 0;
+    var usedTotal = 0;
+    rows.forEach(function (row, idx) {
+      var r = row.r;
+      if (r) { done++; lost += r.points; usedTotal += r.used; }
+      var li = textEl('li', 'rank-row' + (r ? (r.points ? ' bad' : ' ok') : ' wait'));
+      var pos = textEl('span', 'rank-pos', r ? String(idx + 1) : '–');
+      var who = textEl('span', 'rank-who');
+      var strong = textEl('strong', null, row.item.lider);
+      if (all) {
+        var dot = textEl('i', 'rank-dot');
+        dot.style.setProperty('--c', planCats[row.item.cat].cor);
+        strong.insertBefore(dot, strong.firstChild);
+      }
+      who.appendChild(strong);
+      who.appendChild(textEl('small', null, row.item.nome));
+      var time = textEl('span', 'rank-time', r ? mmss(r.used) : '—');
+      time.appendChild(textEl('small', null, 'de ' + mmss(r ? r.allowed : itemMs(row.item))));
+      var pts = textEl('span', 'rank-pts', r ? (r.points ? '−' + r.points : '✓') : '');
+      li.appendChild(pos);
+      li.appendChild(who);
+      li.appendChild(time);
+      li.appendChild(pts);
+      el.rankList.appendChild(li);
+    });
+    setText(el.rankFoot, done + ' de ' + rows.length + ' apresentações · tempo total ' +
+      mmss(usedTotal) + ' · ' + (lost ? 'pontos perdidos: ' + lost : 'nenhum ponto perdido'));
+  }
+
+  // Which of the big views is up, and what it says. Changes fade (see .scr in style.css).
+  function renderScreens() {
+    if (!PLAN) return;
+    var sc = Core.screenOf(state);
+    var name = sc.name;
+    var item = null;
+    var cat = null;
+    if (name === 'call') {
+      item = planById[sc.arg] || null;
+      if (!item) name = 'logo';
+    } else if (name === 'parodia') {
+      item = sc.arg ? planById[sc.arg] || null : null;
+    } else if (name === 'rank') {
+      if (sc.arg !== 'all' && !planCats[sc.arg]) name = 'logo';
+    } else if (name !== 'logo') {
+      name = 'timer';
+    }
+    if (item) cat = planCats[item.cat];
+
+    // texts, only when what they say changes (the view that fades out keeps its words)
+    var key = name + '|' + sc.arg;
+    var fillKey = key + '|' + (name === 'rank' ? JSON.stringify(state.agenda.results) : '');
+    if (fillKey !== screenKey) {
+      screenKey = fillKey;
+      if (name === 'call') {
+        el.scrCall.style.setProperty('--c', cat.cor);
+        setText(el.callCat, cat.nome);
+        setText(el.callLead, item.lider);
+        setText(el.callName, item.nome);
+        setText(el.callTime, 'Tempo: ' + Core.durationLabel(itemMs(item)));
+      } else if (name === 'parodia') {
+        var pc = videoCat || { cor: '#e5502f' };
+        el.scrParodia.style.setProperty('--c', pc.cor);
+        setText(el.parWord, (videoCat ? videoCat.nome : 'Paródia').toUpperCase());
+        setText(el.parWho, item ? item.lider + ' · ' + item.nome : '');
+      } else if (name === 'rank') {
+        renderRank(sc.arg);
+      }
+      needFit = true;
+    }
+
+    var layer = name === 'timer' ? '' : SCREEN_LAYERS[name];
+    if (layer !== shownScreen) {
+      shownScreen = layer;
+      Object.keys(SCREEN_LAYERS).forEach(function (n) {
+        var id = SCREEN_LAYERS[n];
+        setClass(el[id], 'on', id === layer);
+      });
+      setClass(app, 'has-screen', !!layer);
+      setClass(el.screens, 'clear', !layer);
+      needFit = true;
+    }
+    // the colored frame also stays (thinner) around the clock of a presentation
+    var ci = agendaNow().item;
+    var frame = ci && planCats[ci.cat] ? planCats[ci.cat].cor : '';
+    el.display.style.setProperty('--cat', frame || 'transparent');
+    setClass(app, 'has-cat', !!frame);
+    renderScreenPicker(name, sc);
+    fitScreens();
+  }
+
+  function screenLabel(name, sc) {
+    if (name === 'logo') return state.agenda.screen ? 'logo MBRF' : 'logo MBRF (automático)';
+    if (name === 'call') return 'chamada do grupo';
+    if (name === 'parodia') return 'Paródia';
+    if (name === 'rank') return 'tempos · ' + (sc.arg === 'all' ? 'total' : planCats[sc.arg].nome);
+    return 'cronômetro';
+  }
+
+  function renderScreenPicker(name, sc) {
+    setText(el.scrNow, screenLabel(name, sc));
+    var forced = state.agenda.screen || '';
+    var forcedBase = forced.indexOf('parodia') === 0 ? 'parodia' : forced;
+    Array.prototype.forEach.call(el.scrPicker.children, function (b) {
+      setClass(b, 'active', b.getAttribute('data-screen') === forcedBase);
+    });
+    Array.prototype.forEach.call(el.scrRankPicker.children, function (b) {
+      setClass(b, 'active', b.getAttribute('data-screen') === forced);
+    });
+  }
+
+  function buildRankPicker() {
+    el.scrRankPicker.textContent = '';
+    PLAN.categorias.filter(function (c) { return !c.video; }).forEach(function (c) {
+      var b = textEl('button', 'chip', c.nome);
+      b.type = 'button';
+      b.setAttribute('data-screen', 'rank:' + c.id);
+      var dot = textEl('span', 'dot-c');
+      dot.style.setProperty('--c', c.cor);
+      b.insertBefore(dot, b.firstChild);
+      el.scrRankPicker.appendChild(b);
+    });
+    var all = textEl('button', 'chip', 'Total');
+    all.type = 'button';
+    all.setAttribute('data-screen', 'rank:all');
+    el.scrRankPicker.appendChild(all);
+  }
+
+  // Shrinks a text until it fits its box (long names, several lines).
+  function fitText(node, maxFactor, minFactor) {
+    var du = displayUnit || 500;
+    var size = du * maxFactor;
+    var min = du * minFactor;
+    node.style.fontSize = Math.round(size) + 'px';
+    var guard = 40;
+    // the box grows with its text up to a maximum height (CSS); too tall or too wide is too big
+    var limit = parseFloat(window.getComputedStyle(node).maxHeight) || node.clientHeight;
+    while (guard-- > 0 && size > min && (node.scrollHeight > limit + 1 || node.scrollWidth > node.clientWidth + 1)) {
+      size *= 0.94;
+      node.style.fontSize = Math.round(size) + 'px';
+    }
+  }
+
+  function fitScreens() {
+    if (!PLAN || !displayUnit) return;
+    if (shownScreen === 'scrCall') {
+      fitText(el.callLead, 0.1, 0.035);
+      fitText(el.callName, 0.052, 0.026);
+    } else if (shownScreen === 'scrParodia') {
+      fitText(el.parWord, 0.2, 0.06);
+      fitText(el.parWho, 0.05, 0.026);
+    }
+  }
+
   // Half time and one minute left: every screen notices, the first to ask gets the
   // message on all of them (the shared state accepts it once per presentation).
   var alertTried = { half: 0, last: 0 };
@@ -1069,6 +1268,11 @@
     if (tv.status === 'idle') return;
     if (!a.registered && !window.confirm('Zerar o tempo de "' + a.item.nome + '" SEM registrar?')) return;
     dispatch({ type: 'reset', target: 'timer' });
+  }
+
+  // Pressing what is already on the tablet gives it back to the automatic mode.
+  function toggleScreen(name) {
+    dispatch({ type: 'screen', name: state.agenda.screen === name ? '' : name });
   }
 
   function chooseItem(item) {
@@ -1157,7 +1361,19 @@
     });
     el.agList.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('.ag-item');
-      if (b) chooseItem(planById[b.getAttribute('data-id')]);
+      if (!b) return;
+      var item = planById[b.getAttribute('data-id')];
+      if (item && isVideo(item)) toggleScreen('parodia:' + item.id);
+      else chooseItem(item);
+    });
+    [el.scrPicker, el.scrRankPicker].forEach(function (box) {
+      box.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('.chip');
+        if (!b) return;
+        var name = b.getAttribute('data-screen');
+        if (name === '') dispatch({ type: 'screen', name: '' });
+        else toggleScreen(name);
+      });
     });
     el.agMainBtn.addEventListener('click', agendaMainPress);
     el.agStopBtn.addEventListener('click', function () { dispatch({ type: 'finish' }); });
@@ -1188,6 +1404,7 @@
       var name = 'tempos-seminario-' + d.getFullYear() + '-' + Core.pad2(d.getMonth() + 1) + '-' + Core.pad2(d.getDate()) + '.csv';
       downloadText(name, rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n'), 'text/csv;charset=utf-8');
     });
+    buildRankPicker();
     setView(prefs.view);
   }
 
@@ -1250,6 +1467,7 @@
       fitKey = key;
       needFit = false;
       fitDigits();
+      fitScreens();
     }
     updateClock();
     return view;
@@ -1521,11 +1739,17 @@
   }
 
   var displayHeight = 0;
+  var displayWidth = 0;
+  var displayUnit = 0; // the shorter side: seminar screens size their text from it
   function measureDisplay() {
     var h = el.display.clientHeight;
-    if (h && h !== displayHeight) {
+    var w = el.display.clientWidth;
+    if (h && (h !== displayHeight || w !== displayWidth)) {
       displayHeight = h;
+      displayWidth = w;
+      displayUnit = Math.min(w, h);
       el.display.style.setProperty('--dh', h + 'px');
+      el.display.style.setProperty('--du', displayUnit + 'px');
       setClass(el.display, 'tight', h < 260);
       setClass(el.display, 'tiny', h < 170);
       needFit = true;
