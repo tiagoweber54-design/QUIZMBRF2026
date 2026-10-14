@@ -1,0 +1,15 @@
+{
+  "name": "cronometro-sync",
+  "version": "1.0.0",
+  "description": "Cronômetro e temporizador controlados ao mesmo tempo por vários aparelhos da mesma rede (iPad, iPhone, PC).",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js --abrir",
+    "test": "node --test test/core.test.js test/cloud.test.js test/server.test.js test/rules.test.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "MIT"
+}

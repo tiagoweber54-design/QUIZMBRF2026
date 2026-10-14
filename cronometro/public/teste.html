@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Testar a conexão — Cronômetro Sync</title>
+<meta name="color-scheme" content="dark">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0b0e; color: #f5f7fa; font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 6px; }
+  p { color: #c7ccd4; }
+  .muted { color: #8a92a0; font-size: 14px; }
+  label { display: block; margin: 18px 0 6px; font-weight: 650; }
+  .row { display: flex; gap: 8px; }
+  input { flex: 1; min-width: 0; height: 46px; padding: 0 12px; border: 1px solid #262b34; border-radius: 12px; background: #0d0f13; color: inherit; font-size: 16px; }
+  button { height: 46px; padding: 0 18px; border: 0; border-radius: 12px; background: #0a84ff; color: #fff; font-size: 16px; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  ol { list-style: none; margin: 22px 0 0; padding: 0; }
+  li { display: flex; gap: 12px; padding: 12px 14px; margin-bottom: 8px; border: 1px solid #262b34; border-radius: 14px; background: #15181e; }
+  li .icon { flex: none; width: 24px; text-align: center; font-weight: 800; }
+  li .what { font-weight: 650; }
+  li .detail { color: #c7ccd4; font-size: 14px; margin-top: 2px; overflow-wrap: anywhere; }
+  li.ok .icon { color: #30d158; } li.fail { border-color: #7a2a22; } li.fail .icon { color: #ff453a; } li.run .icon { color: #ffd60a; }
+  #summary { margin-top: 18px; padding: 14px; border-radius: 14px; font-weight: 650; }
+  #summary.good { background: #0f3320; color: #8ff0ac; } #summary.bad { background: #3a1d12; color: #ffb4a8; }
+  a { color: #0a84ff; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Testar a conexão</h1>
+  <p>Confere, em poucos segundos, se este aparelho e esta rede conseguem usar o Firebase: o endereço, a internet, as regras de segurança e a sincronização em tempo real.</p>
+
+  <label for="db">Endereço do Firebase (Realtime Database)</label>
+  <div class="row">
+    <input id="db" type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://seu-projeto-default-rtdb.firebaseio.com">
+    <button id="go" type="button">Testar</button>
+  </div>
+  <p class="muted">Vem preenchido se o programa já estiver configurado. Fica no alto da aba <strong>Dados</strong> do Realtime Database.</p>
+
+  <ol id="steps"></ol>
+  <div id="summary" hidden></div>
+  <p class="muted"><a href="./">← Voltar ao cronômetro</a></p>
+</main>
+<script src="core.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud.js"></script>
+<script src="teste.js"></script>
+</body>
+</html>
