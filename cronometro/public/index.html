@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cronômetro Sync</title>
+<meta name="description" content="Cronômetro e temporizador controlados ao mesmo tempo pelo iPad, iPhone e PC na mesma rede.">
+<meta name="theme-color" content="#0b0c0f">
+<meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cronômetro">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4.6v14.8a1 1 0 0 0 1.52.85l12.1-7.4a1 1 0 0 0 0-1.7L8.52 3.75A1 1 0 0 0 7 4.6z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect fill="currentColor" x="5.5" y="4" width="4.8" height="16" rx="1.3"/><rect fill="currentColor" x="13.7" y="4" width="4.8" height="16" rx="1.3"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6l-2.5 2.5"/><path d="M3.5 3.5v5h5"/></g></symbol>
+  <symbol id="i-restart" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12A8.5 8.5 0 1 1 18 6l2.5 2.5"/><path d="M20.5 3.5v5h-5"/></g><path fill="currentColor" d="M10 8.8v6.4a.6.6 0 0 0 .9.5l5-3.2a.6.6 0 0 0 0-1l-5-3.2a.6.6 0 0 0-.9.5z"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11.5l-2.5 4.25L16.5 12.5H5"/></g></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.2"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.2"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.2"/></g><path fill="currentColor" d="M14 14h3v3h-3zM17 17h3.5v3.5H17zM14 19h2v1.5h-2zM19 14h1.5v2H19z"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M4 6.5h9M18 6.5h2M4 12h3M11 12h9M4 17.5h11M19.5 17.5h.5"/><circle cx="15.5" cy="6.5" r="2.3"/><circle cx="8.8" cy="12" r="2.3"/><circle cx="17.3" cy="17.5" r="2.3"/></g></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M8.5 3.5h-3a2 2 0 0 0-2 2v3M20.5 8.5v-3a2 2 0 0 0-2-2h-3M3.5 15.5v3a2 2 0 0 0 2 2h3M15.5 20.5h3a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-shrink" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="M8.5 3.5v3a2 2 0 0 1-2 2h-3M20.5 8.5h-3a2 2 0 0 1-2-2v-3M3.5 15.5h3a2 2 0 0 1 2 2v3M15.5 20.5v-3a2 2 0 0 1 2-2h3"/></symbol>
+  <symbol id="i-screen" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></g></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path fill="currentColor" d="M11 5.2 6.6 8.8H3.8a.8.8 0 0 0-.8.8v4.8c0 .44.36.8.8.8h2.8l4.4 3.6a.6.6 0 0 0 1-.46V5.66a.6.6 0 0 0-1-.46z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M15.5 9a4.2 4.2 0 0 1 0 6M18.3 6.2a8.2 8.2 0 0 1 0 11.6"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path fill="currentColor" d="M11 5.2 6.6 8.8H3.8a.8.8 0 0 0-.8.8v4.8c0 .44.36.8.8.8h2.8l4.4 3.6a.6.6 0 0 0 1-.46V5.66a.6.6 0 0 0-1-.46z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M15.5 9.5l5 5M20.5 9.5l-5 5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5V5.5a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></g></symbol>
+</svg>
+
+<div id="app" class="app mode-timer phase-normal status-idle" data-conn="connecting">
+
+  <header class="topbar">
+    <button type="button" id="statusBtn" class="status" title="Aparelhos conectados">
+      <span class="dot" aria-hidden="true"></span><span id="statusText">Conectando…</span>
+    </button>
+    <div class="top-actions">
+      <button type="button" id="soundBtn" class="icon-btn" title="Som neste aparelho" aria-label="Som neste aparelho">
+        <svg aria-hidden="true" class="i ic-sound"><use xlink:href="#i-sound" href="#i-sound"/></svg>
+        <svg aria-hidden="true" class="i ic-mute"><use xlink:href="#i-mute" href="#i-mute"/></svg>
+        <span class="badge" aria-hidden="true"></span>
+      </button>
+      <button type="button" id="connectBtn" class="icon-btn" title="Conectar outros aparelhos" aria-label="Conectar outros aparelhos">
+        <svg aria-hidden="true" class="i"><use xlink:href="#i-qr" href="#i-qr"/></svg>
+      </button>
+      <button type="button" id="settingsBtn" class="icon-btn" title="Ajustes" aria-label="Ajustes">
+        <svg aria-hidden="true" class="i"><use xlink:href="#i-sliders" href="#i-sliders"/></svg>
+      </button>
+      <button type="button" id="fullscreenBtn" class="icon-btn" title="Tela cheia (F)" aria-label="Tela cheia" hidden>
+        <svg aria-hidden="true" class="i ic-expand"><use xlink:href="#i-expand" href="#i-expand"/></svg>
+        <svg aria-hidden="true" class="i ic-shrink"><use xlink:href="#i-shrink" href="#i-shrink"/></svg>
+      </button>
+      <button type="button" id="displayBtn" class="icon-btn" title="Modo exibição: só o tempo, sem botões (E)" aria-label="Modo exibição">
+        <svg aria-hidden="true" class="i"><use xlink:href="#i-screen" href="#i-screen"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="display" class="display">
+    <div class="display-top">
+      <div id="clock" class="clock" aria-label="Hora atual"></div>
+      <div class="display-exit">
+        <span class="dot" aria-hidden="true"></span>
+        <button type="button" id="exitDisplayBtn" class="icon-btn ghost" title="Sair do modo exibição" aria-label="Sair do modo exibição">
+          <svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="banner" class="banner" hidden>
+      <span id="bannerText" class="banner-text"></span>
+      <button type="button" id="bannerClose" class="banner-close" aria-label="Remover mensagem">
+        <svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg>
+      </button>
+    </div>
+    <div id="title" class="title" hidden></div>
+    <div id="digitsWrap" class="digits-wrap">
+      <div id="digits" class="digits" aria-live="off"><span id="sign" class="sign"></span><span id="main">05:00</span><span id="frac" class="frac"></span></div>
+    </div>
+    <div class="progress" aria-hidden="true"><div id="progressBar" class="progress-bar"></div></div>
+    <div id="sub" class="sub">Pronto</div>
+  </main>
+
+  <section id="controls" class="controls" aria-label="Controles">
+    <div class="controls-inner">
+
+      <div class="panel panel-main">
+        <div class="segmented" role="group" aria-label="O que todas as telas mostram">
+          <button type="button" class="seg" data-mode="timer">Temporizador</button>
+          <button type="button" class="seg" data-mode="stopwatch">Cronômetro</button>
+        </div>
+        <div class="primary-row">
+          <button type="button" id="resetBtn" class="btn btn-quiet" title="Zerar (R)">
+            <svg aria-hidden="true" class="i"><use xlink:href="#i-reset" href="#i-reset"/></svg><span>Zerar</span>
+          </button>
+          <button type="button" id="lapBtn" class="btn btn-quiet only-stopwatch" title="Marcar volta (V)">
+            <svg aria-hidden="true" class="i"><use xlink:href="#i-flag" href="#i-flag"/></svg><span>Volta</span>
+          </button>
+          <button type="button" id="mainBtn" class="btn btn-main" data-action="start" title="Iniciar / pausar (Espaço)">
+            <svg aria-hidden="true" class="i ic-start"><use xlink:href="#i-play" href="#i-play"/></svg>
+            <svg aria-hidden="true" class="i ic-pause"><use xlink:href="#i-pause" href="#i-pause"/></svg>
+            <svg aria-hidden="true" class="i ic-restart"><use xlink:href="#i-restart" href="#i-restart"/></svg>
+            <span id="mainLabel">Iniciar</span>
+          </button>
+        </div>
+        <div class="adjust-row only-timer" role="group" aria-label="Ajustar o tempo restante">
+          <button type="button" class="btn btn-small" data-adjust="-60000" title="Tirar 1 minuto (↓)">−1 min</button>
+          <button type="button" class="btn btn-small" data-adjust="-10000" title="Tirar 10 segundos (←)">−10 s</button>
+          <button type="button" class="btn btn-small" data-adjust="10000" title="Somar 10 segundos (→)">+10 s</button>
+          <button type="button" class="btn btn-small" data-adjust="60000" title="Somar 1 minuto (↑)">+1 min</button>
+        </div>
+      </div>
+
+      <div class="panel only-timer">
+        <h2 class="panel-title">Duração</h2>
+        <div id="presets" class="presets" role="group" aria-label="Tempos rápidos"></div>
+        <form id="customForm" class="custom" autocomplete="off">
+          <label class="num"><input id="inH" type="number" inputmode="numeric" min="0" max="99" placeholder="0" aria-label="Horas"><span>h</span></label>
+          <label class="num"><input id="inM" type="number" inputmode="numeric" min="0" max="999" placeholder="5" aria-label="Minutos"><span>min</span></label>
+          <label class="num"><input id="inS" type="number" inputmode="numeric" min="0" max="999" placeholder="0" aria-label="Segundos"><span>s</span></label>
+          <button type="submit" class="btn btn-small btn-accent">Definir</button>
+        </form>
+      </div>
+
+      <div class="panel only-stopwatch">
+        <h2 class="panel-title">Voltas</h2>
+        <ol id="laps" class="laps"></ol>
+        <p id="lapsEmpty" class="muted small">Toque em <strong>Volta</strong> com o cronômetro andando para marcar parciais.</p>
+      </div>
+
+      <div class="panel">
+        <h2 class="panel-title">Mensagem na tela</h2>
+        <form id="messageForm" class="inline-form" autocomplete="off">
+          <input id="messageInput" type="text" maxlength="140" placeholder="Ex.: Faltam 5 minutos" enterkeyhint="send" aria-label="Mensagem">
+          <button type="submit" class="btn btn-small btn-accent">Enviar</button>
+        </form>
+        <div id="quickMessages" class="chips" role="group" aria-label="Mensagens rápidas"></div>
+        <div class="row-between">
+          <label class="check"><input id="flashInput" type="checkbox" checked> Piscar para chamar atenção</label>
+          <button type="button" id="clearMessageBtn" class="btn btn-small btn-quiet">Limpar</button>
+        </div>
+        <h2 class="panel-title spaced">Título acima do tempo</h2>
+        <form id="titleForm" class="inline-form" autocomplete="off">
+          <input id="titleInput" type="text" maxlength="80" placeholder="Ex.: Apresentação — Logística" enterkeyhint="done" aria-label="Título">
+          <button type="submit" class="btn btn-small btn-accent">Aplicar</button>
+        </form>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<div id="connectModal" class="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="connectTitle">
+    <div class="sheet-head">
+      <h2 id="connectTitle">Conectar outros aparelhos</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Fechar"><svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg></button>
+    </div>
+    <div id="connectServer">
+      <p>Conecte o iPad, o iPhone ou outro computador na <strong>mesma rede Wi-Fi</strong> e abra este endereço no navegador:</p>
+      <div class="url-row">
+        <code id="shareUrl" class="url"></code>
+        <button type="button" id="copyBtn" class="btn btn-small btn-quiet"><svg aria-hidden="true" class="i"><use xlink:href="#i-copy" href="#i-copy"/></svg><span>Copiar</span></button>
+      </div>
+      <div id="qr" class="qr" aria-label="QR code do endereço"></div>
+      <p class="muted small center">No iPhone/iPad: abra a <strong>Câmera</strong> e aponte para o código.</p>
+      <div id="otherUrls" class="other-urls" hidden></div>
+    </div>
+    <div id="connectLocal" hidden>
+      <p><strong>Este aparelho está sem servidor</strong>, então o tempo não é compartilhado com outros aparelhos.</p>
+      <ol class="steps">
+        <li>No computador, abra a pasta <code>cronometro</code> e dê dois cliques em <code>INICIAR-WINDOWS.bat</code> (Windows) ou <code>INICIAR-MAC.command</code> (Mac).</li>
+        <li>Abra nos aparelhos o endereço que aparecer na janela (ex.: <code>http://192.168.0.15:3000</code>).</li>
+      </ol>
+      <p class="muted small">Precisa do Node.js instalado no computador (nodejs.org). Veja o arquivo README.md da pasta.</p>
+    </div>
+    <h3 class="sheet-sub">Aparelhos conectados agora <span id="deviceCount" class="pill"></span></h3>
+    <ul id="devices" class="devices"></ul>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="sheet-head">
+      <h2 id="settingsTitle">Ajustes</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Fechar"><svg aria-hidden="true" class="i"><use xlink:href="#i-close" href="#i-close"/></svg></button>
+    </div>
+    <h3 class="sheet-sub">Para todos os aparelhos</h3>
+    <div class="setting">
+      <label for="warnSel"><span class="swatch warn"></span>Aviso amarelo quando faltar</label>
+      <select id="warnSel"></select>
+    </div>
+    <div class="setting">
+      <label for="dangerSel"><span class="swatch danger"></span>Aviso vermelho quando faltar</label>
+      <select id="dangerSel"></select>
+    </div>
+    <label class="setting switch">
+      <span>Continuar contando depois do zero<small>Mostra o tempo excedido (−00:35) em vermelho. Desligado: para no zero.</small></span>
+      <input id="overtimeChk" type="checkbox">
+    </label>
+
+    <h3 class="sheet-sub">Só neste aparelho</h3>
+    <label class="setting switch">
+      <span>Som<small>Bipe nos avisos e alarme no fim. Em iPhone/iPad, toque na tela uma vez para liberar o som.</small></span>
+      <input id="soundChk" type="checkbox">
+    </label>
+    <div class="setting setting-actions"><button type="button" id="testSoundBtn" class="btn btn-small btn-quiet">Testar som</button></div>
+    <label class="setting switch">
+      <span>Mostrar relógio</span>
+      <input id="clockChk" type="checkbox">
+    </label>
+    <label class="setting switch">
+      <span>Manter a tela ligada<small id="awakeNote"></small></span>
+      <input id="awakeChk" type="checkbox">
+    </label>
+    <div class="setting setting-stack">
+      <label for="nameInput">Nome deste aparelho</label>
+      <input id="nameInput" type="text" maxlength="40" autocomplete="off" enterkeyhint="done">
+    </div>
+
+    <div id="shortcuts" class="shortcuts">
+      <h3 class="sheet-sub">Atalhos de teclado</h3>
+      <dl>
+        <dt>Espaço</dt><dd>Iniciar / pausar</dd>
+        <dt>R</dt><dd>Zerar</dd>
+        <dt>V</dt><dd>Marcar volta</dd>
+        <dt>T / C</dt><dd>Temporizador / cronômetro</dd>
+        <dt>↑ ↓</dt><dd>+1 / −1 minuto</dd>
+        <dt>→ ←</dt><dd>+10 / −10 segundos</dd>
+        <dt>E</dt><dd>Modo exibição</dd>
+        <dt>F</dt><dd>Tela cheia</dd>
+        <dt>M</dt><dd>Som liga/desliga</dd>
+      </dl>
+    </div>
+    <p class="muted small version">Cronômetro Sync <span id="versionText"></span></p>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script src="core.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
