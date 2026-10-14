@@ -254,3 +254,145 @@ test('formatting helpers', () => {
   assert.equal(core.durationLabel(5400000), '1 h 30 min');
   assert.equal(core.durationLabel(0), '0 s');
 });
+
+// ------------------------------------------------------------------ seminar
+
+const SEMINAR_LIMIT = 8 * 60000;
+
+function onTheClock(id, ms) {
+  return run(core.initialState(), [[0, { type: 'select', id, ms: ms || SEMINAR_LIMIT }]]);
+}
+
+test('one point is lost for every full minute over the limit', () => {
+  const cases = [[-60000, 0], [0, 0], [1, 0], [59999, 0], [60000, 1], [119999, 1], [120000, 2], [185000, 3]];
+  for (const [over, points] of cases) assert.equal(core.penaltyPoints(over), points, over + ' ms over');
+});
+
+test('choosing a presentation puts its limit on the clock, ready to start', () => {
+  const s = onTheClock('p01');
+  assert.equal(s.agenda.current, 'p01');
+  assert.equal(s.timer.base, SEMINAR_LIMIT);
+  assert.equal(s.timer.duration, SEMINAR_LIMIT);
+  assert.equal(core.timerView(s, T0 + 5000).status, 'idle');
+  assert.equal(s.settings.overtime, true);
+  assert.equal(s.mode, 'timer');
+  // a bad id or a bad limit changes nothing
+  assert.equal(core.apply(s, { type: 'select', id: 'P 01!', ms: 1000 }, T0, me), s);
+  assert.equal(core.apply(s, { type: 'select', id: 'p02', ms: 'x' }, T0, me), s);
+  assert.equal(core.apply(s, { type: 'select', id: '', ms: 1000 }, T0, me), s);
+});
+
+test('stopping registers the time used; only then does it count', () => {
+  let s = onTheClock('p01');
+  s = run(s, [[1000, { type: 'start', target: 'timer' }], [61000, { type: 'pause', target: 'timer' }]]);
+  assert.deepEqual(s.agenda.results, {}, 'pausing registers nothing');
+  s = run(s, [[100000, { type: 'start', target: 'timer' }]]); // paused for 39 s, then on again
+  s = core.apply(s, { type: 'finish' }, T0 + 100000 + 60000, me);
+  const r = s.agenda.results.p01;
+  assert.equal(r.used, 120000);
+  assert.equal(r.allowed, SEMINAR_LIMIT);
+  assert.equal(r.points, 0);
+  assert.equal(r.by, 'iPhone');
+  assert.equal(core.isRegistered(s), true);
+  assert.equal(core.timerView(s, T0 + 9e6).status, 'paused', 'the clock stays stopped');
+  assert.equal(s.last.type, 'finish');
+  assert.equal(s.last.ms, 120000);
+});
+
+test('going over the limit costs points, and the time is kept exactly', () => {
+  let s = onTheClock('p01', 3 * 60000);
+  s = run(s, [[0, { type: 'start', target: 'timer' }]]);
+  s = core.apply(s, { type: 'finish' }, T0 + 3 * 60000 + 59999, me);
+  assert.equal(s.agenda.results.p01.points, 0, 'under a minute over is free');
+
+  s = onTheClock('p02', 3 * 60000);
+  s = run(s, [[0, { type: 'start', target: 'timer' }]]);
+  s = core.apply(s, { type: 'finish' }, T0 + 3 * 60000 + 60000, me);
+  assert.equal(s.agenda.results.p02.points, 1);
+  assert.equal(s.agenda.results.p02.used, 4 * 60000);
+
+  s = onTheClock('p03', 3 * 60000);
+  s = run(s, [[0, { type: 'start', target: 'timer' }]]);
+  s = core.apply(s, { type: 'finish' }, T0 + 3 * 60000 + 150000, me);
+  assert.equal(s.agenda.results.p03.points, 2);
+});
+
+test('stopping works from a pause, and does nothing before anything was timed', () => {
+  let s = onTheClock('p01');
+  assert.equal(core.apply(s, { type: 'finish' }, T0 + 1000, me), s, 'nothing timed yet');
+  s = run(s, [[0, { type: 'start', target: 'timer' }], [90000, { type: 'pause', target: 'timer' }]]);
+  s = core.apply(s, { type: 'finish' }, T0 + 500000, me);
+  assert.equal(s.agenda.results.p01.used, 90000, 'time spent paused is not counted');
+  assert.equal(core.apply(s, { type: 'finish' }, T0 + 600000, me), s, 'registering twice does nothing');
+  assert.equal(core.apply(core.initialState(), { type: 'finish' }, T0, me).agenda.current, null);
+});
+
+test('a registered presentation cannot be restarted or adjusted, but can be redone', () => {
+  let s = onTheClock('p01');
+  s = run(s, [[0, { type: 'start', target: 'timer' }], [60000, { type: 'finish' }]]);
+  assert.equal(core.apply(s, { type: 'start', target: 'timer' }, T0 + 70000, me), s);
+  assert.equal(core.apply(s, { type: 'adjust', ms: 60000 }, T0 + 70000, me), s);
+  // Zerar clears the clock; the new run overwrites the old result
+  s = core.apply(s, { type: 'reset', target: 'timer' }, T0 + 80000, me);
+  assert.equal(core.isRegistered(s), false);
+  assert.ok(s.agenda.results.p01, 'the old result stays until replaced');
+  s = run(s, [[90000, { type: 'start', target: 'timer' }]]);
+  s = core.apply(s, { type: 'finish' }, T0 + 90000 + 30000, me);
+  assert.equal(s.agenda.results.p01.used, 30000);
+});
+
+test('a presentation under way is not replaced by accident', () => {
+  let s = onTheClock('p01');
+  s = run(s, [[0, { type: 'start', target: 'timer' }]]);
+  assert.equal(core.apply(s, { type: 'select', id: 'p02', ms: 60000 }, T0 + 5000, me), s, 'running');
+  s = run(s, [[5000, { type: 'pause', target: 'timer' }]]);
+  assert.equal(core.apply(s, { type: 'select', id: 'p02', ms: 60000 }, T0 + 6000, me), s, 'paused');
+  const forced = core.apply(s, { type: 'select', id: 'p02', ms: 60000, force: true }, T0 + 6000, me);
+  assert.equal(forced.agenda.current, 'p02');
+  assert.deepEqual(forced.agenda.results, {}, 'the abandoned one registers nothing');
+  // once registered, the next one can be chosen freely
+  let done = onTheClock('p01');
+  done = run(done, [[0, { type: 'start', target: 'timer' }], [10000, { type: 'finish' }]]);
+  assert.equal(core.apply(done, { type: 'select', id: 'p02', ms: 60000 }, T0 + 20000, me).agenda.current, 'p02');
+  assert.ok(core.apply(done, { type: 'select', id: 'p02', ms: 60000 }, T0 + 20000, me).agenda.results.p01, 'results are kept');
+});
+
+test('results can be cleared one by one or all together', () => {
+  let s = core.initialState();
+  for (const id of ['p01', 'p02', 'p03']) {
+    s = run(s, [[0, { type: 'select', id, ms: 60000 }], [0, { type: 'start', target: 'timer' }], [5000, { type: 'finish' }]]);
+  }
+  assert.deepEqual(Object.keys(s.agenda.results).sort(), ['p01', 'p02', 'p03']);
+  s = core.apply(s, { type: 'clearResult', id: 'p02' }, T0, me);
+  assert.deepEqual(Object.keys(s.agenda.results).sort(), ['p01', 'p03']);
+  assert.equal(core.apply(s, { type: 'clearResult', id: 'p02' }, T0, me), s, 'already gone');
+  s = core.apply(s, { type: 'clearResult', id: '*' }, T0, me);
+  assert.deepEqual(s.agenda.results, {});
+  assert.equal(core.apply(s, { type: 'clearResult', id: '*' }, T0, me), s);
+});
+
+test('a free countdown leaves the seminar, and overtime stays on during a presentation', () => {
+  let s = onTheClock('p01');
+  assert.equal(core.apply(s, { type: 'settings', overtime: false }, T0, me), s, 'cannot switch overtime off mid-presentation');
+  s = core.apply(s, { type: 'set', ms: 5 * 60000 }, T0, me);
+  assert.equal(s.agenda.current, null);
+  assert.equal(core.apply(s, { type: 'settings', overtime: false }, T0, me).settings.overtime, false);
+});
+
+test('results survive a trip through the database', () => {
+  let s = onTheClock('p07');
+  s = run(s, [[0, { type: 'start', target: 'timer' }], [90000, { type: 'finish' }]]);
+  const stored = JSON.parse(JSON.stringify(s)); // nulls and empty lists are dropped by the database
+  delete stored.last.ms;
+  const back = core.normalize(stored);
+  assert.equal(back.agenda.current, 'p07');
+  assert.deepEqual(back.agenda.results.p07, s.agenda.results.p07);
+  // an older state without any agenda still works
+  const old = core.normalize({ rev: 3, timer: { base: 60000, duration: 60000, elapsed: 0 } });
+  assert.deepEqual(old.agenda, { current: null, results: {} });
+  // junk is dropped
+  const junk = core.normalize({ agenda: { current: 'NOT OK!', results: { 'bad id': { used: 1, allowed: 1 }, p01: 'x', p02: { used: 5000, allowed: 'x' }, p03: { used: 5000, allowed: 60000, points: -3 } } } });
+  assert.equal(junk.agenda.current, null);
+  assert.deepEqual(Object.keys(junk.agenda.results), ['p03']);
+  assert.equal(junk.agenda.results.p03.points, 0);
+});

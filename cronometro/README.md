@@ -77,6 +77,21 @@ O tempo fica guardado num banco de dados gratuito do **Firebase** (Google). O si
             "id": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           },
+          "agenda": {
+            "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "results": {
+              "$id": {
+                ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",
+                "used": { ".validate": "newData.isNumber()" },
+                "allowed": { ".validate": "newData.isNumber()" },
+                "points": { ".validate": "newData.isNumber()" },
+                "at": { ".validate": "newData.isNumber()" },
+                "by": { ".validate": "newData.isString() && newData.val().length <= 80" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          },
           "last": {
             "type": { ".validate": "newData.isString() && newData.val().length <= 20" },
             "target": { ".validate": "newData.isString() && newData.val().length <= 20" },
@@ -187,6 +202,35 @@ Cada aparelho liga ou desliga o próprio som, sem mexer nos outros. Quando algu�
 | E | Modo exibição (só o tempo) |
 | F | Tela cheia |
 | M | Liga / desliga o som |
+
+## Modo seminário: apresentações, tempos e penalidades
+
+A aba **Apresentações** traz a programação do seminário (arquivo `public/programacao.js`), na ordem do papel, com as categorias **Case 5S**, **CIQ PDCA**, **Kaizen** e **Paródia**.
+
+**Quem cuida do tempo:**
+1. Toque numa categoria (ou em **Todas**) para ver só aquelas apresentações, sempre na ordem do seminário.
+2. Toque na apresentação. O nome, a categoria, o líder e o tempo dela aparecem em **todas** as telas, e o relógio já fica no tempo certo.
+3. **Iniciar**. Dá para **Pausar** e **Continuar** quantas vezes precisar.
+4. **Parar** (ou a tecla **P**) encerra e **registra** o tempo usado. Só o Parar registra.
+5. Aparece o botão **Próxima: …**, que já escolhe a seguinte da fila.
+
+**Pontos:** cada minuto **completo** acima do tempo custa **1 ponto**. Até 59 segundos acima, não perde nada. Passou de −01:00, são 1 ponto; de −02:00, 2 pontos; e assim por diante. Enquanto o tempo estoura, a tela já mostra "Penalidade: −N pontos".
+
+**Erros e correções:**
+- Parou sem querer? Toque em **Desfazer a parada**: o tempo volta pausado de onde estava, e dá para **Continuar**.
+- **Zerar** limpa o relógio sem registrar (pede confirmação).
+- Escolher outra apresentação com uma em andamento pergunta antes, e o tempo da que ficou para trás **não** é registrado.
+- Escolher uma que já tem tempo pergunta se quer refazer.
+
+**Aba Tempos:** todas as apresentações com o tempo limite, o tempo usado, o excesso, os pontos perdidos e a situação (Pendente, Em andamento, Sem penalização ou Com penalização). Dá para filtrar por categoria, apagar um tempo (×), **Copiar para Excel**, **Baixar CSV** (abre direto no Excel) e **Limpar todos os tempos** (use depois do ensaio, antes do evento).
+
+Os tempos ficam guardados na sala (no Firebase, ou no servidor local). Qualquer aparelho vê a mesma tabela, e ela continua lá se você recarregar a página.
+
+**Para mudar nomes, tempos ou a ordem**, edite `cronometro/public/programacao.js` (no GitHub: abra o arquivo, ícone de lápis, **Commit changes**). O campo `min` é o tempo de cada apresentação em minutos. Se você mudar a regra de pontos, ela está em `public/core.js` (`PENALTY_MS` e `PENALTY_POINTS`).
+
+**A aba Livre** é o cronômetro/temporizador comum, sem programação. Escolher um tempo livre tira o nome da apresentação das telas.
+
+> **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos.
 
 ## Problemas comuns (pela internet)
 
