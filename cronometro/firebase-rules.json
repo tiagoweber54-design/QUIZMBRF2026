@@ -43,6 +43,21 @@
             "id": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }
           },
+          "agenda": {
+            "current": { ".validate": "newData.isString() && newData.val().length <= 24" },
+            "results": {
+              "$id": {
+                ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",
+                "used": { ".validate": "newData.isNumber()" },
+                "allowed": { ".validate": "newData.isNumber()" },
+                "points": { ".validate": "newData.isNumber()" },
+                "at": { ".validate": "newData.isNumber()" },
+                "by": { ".validate": "newData.isString() && newData.val().length <= 80" },
+                "$other": { ".validate": false }
+              }
+            },
+            "$other": { ".validate": false }
+          },
           "last": {
             "type": { ".validate": "newData.isString() && newData.val().length <= 20" },
             "target": { ".validate": "newData.isString() && newData.val().length <= 20" },

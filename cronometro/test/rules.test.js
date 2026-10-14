@@ -53,7 +53,12 @@ function randomText(rand, max) {
 function randomCommand(rand) {
   const pick = (list) => list[Math.floor(rand() * list.length)];
   const target = pick(['timer', 'stopwatch']);
-  switch (pick(['start', 'start', 'pause', 'reset', 'restart', 'set', 'adjust', 'adjust', 'lap', 'lap', 'mode', 'title', 'message', 'settings'])) {
+  const id = 'p' + String(1 + Math.floor(rand() * 25)).padStart(2, '0');
+  switch (pick(['start', 'start', 'pause', 'reset', 'restart', 'set', 'adjust', 'adjust', 'lap', 'lap', 'mode', 'title', 'message', 'settings',
+    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult'])) {
+    case 'select': return { type: 'select', id, ms: (1 + Math.floor(rand() * 15)) * 60000, force: rand() < 0.5 };
+    case 'finish': return { type: 'finish' };
+    case 'clearResult': return { type: 'clearResult', id: rand() < 0.1 ? '*' : id };
     case 'start': return { type: 'start', target };
     case 'pause': return { type: 'pause', target };
     case 'reset': return { type: 'reset', target };
@@ -104,6 +109,21 @@ test('the longest texts the app allows are accepted, emoji included', { skip }, 
   allowed(await put('salas/' + ROOM + '/aparelhos/dev1', { nome: '😀'.repeat(core.MAX_NAME) }), 'nome longo com emoji');
 });
 
+test('a day of presentations, with points lost, is accepted', { skip }, async () => {
+  let state = core.initialState();
+  let now = 1700000000000;
+  for (let n = 1; n <= 25; n++) {
+    const id = 'p' + String(n).padStart(2, '0');
+    state = core.apply(state, { type: 'select', id, ms: 8 * 60000 }, now, { id: 'op', name: 'iPhone · Safari' });
+    state = core.apply(state, { type: 'start', target: 'timer' }, now, null);
+    now += 8 * 60000 + (n % 4) * 70000;
+    state = core.apply(state, { type: 'finish' }, now, { id: 'op', name: 'iPhone · Safari' });
+    allowed(await put('salas/' + ROOM + '/estado', state), 'depois da apresentação ' + n);
+  }
+  assert.equal(Object.keys(state.agenda.results).length, 25);
+  assert.ok(Object.values(state.agenda.results).some((r) => r.points > 0));
+});
+
 test('a full lap list (99 laps) is accepted', { skip }, async () => {
   let state = core.apply(core.initialState(), { type: 'mode', mode: 'stopwatch' }, 1700000000000, null);
   state = core.apply(state, { type: 'start', target: 'stopwatch' }, 1700000000000, null);
@@ -150,6 +170,15 @@ test('bad data inside a room is refused', { skip }, async () => {
   await bad((s) => { s.stopwatch.laps = { 0: 'a' }; }, 'volta que não é número');
   await bad((s) => { s.last = { type: 'x'.repeat(21), at: 1 }; }, 'tipo longo demais');
   await bad((s) => { s.last = { type: 'start', by: { id: 'a', name: 'n'.repeat(81) } }; }, 'nome longo demais');
+  const withAgenda = (agenda) => (s) => { s.agenda = agenda; };
+  const goodResult = { used: 1000, allowed: 2000, points: 0 };
+  await bad(withAgenda({ current: 'x'.repeat(25) }), 'id da apresentação longo demais');
+  await bad(withAgenda({ results: { 'MAIÚSCULA': goodResult } }), 'id com caracteres inválidos');
+  await bad(withAgenda({ results: { p01: { used: 1000, allowed: 2000 } } }), 'resultado sem pontos');
+  await bad(withAgenda({ results: { p01: { used: 'x', allowed: 2000, points: 0 } } }), 'tempo que não é número');
+  await bad(withAgenda({ results: { p01: { ...goodResult, extra: 1 } } }), 'campo extra no resultado');
+  await bad(withAgenda({ results: { p01: { ...goodResult, by: 'n'.repeat(81) } } }), 'nome longo demais no resultado');
+  await bad(withAgenda({ outro: 1 }), 'campo extra na agenda');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { desde: 1 }), 'aparelho sem nome');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'n'.repeat(81) }), 'aparelho com nome longo');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'ok', extra: 1 }), 'aparelho com campo extra');

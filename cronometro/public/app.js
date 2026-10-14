@@ -21,7 +21,7 @@
   var ROOM_KEY = 'cronometro-sync.sala';
   var DB_KEY = 'cronometro-sync.db';
   var LOCAL_CHOICE_KEY = 'cronometro-sync.so-local';
-  var PREF_DEFAULTS = { sound: true, clock: true, awake: true, display: false, name: '' };
+  var PREF_DEFAULTS = { sound: true, clock: true, awake: true, display: false, name: '', view: 'apres', cat: 'todas' };
 
   // ------------------------------------------------------------- helpers
 
@@ -97,7 +97,10 @@
     'otherUrls', 'connectLocal', 'deviceCount', 'devices', 'settingsModal', 'warnSel', 'dangerSel', 'overtimeChk',
     'soundChk', 'testSoundBtn', 'clockChk', 'awakeChk', 'awakeNote', 'nameInput', 'versionText', 'toast',
     'connectIntro', 'cloudExtras', 'roomCode', 'cloudProblem', 'changeRoomBtn', 'setupCloud', 'setupCloudBtn',
-    'roomModal', 'roomClose', 'dbBlock', 'dbInput', 'roomCreateBtn', 'roomJoinForm', 'roomInput', 'roomError', 'roomLocalBtn'
+    'roomModal', 'roomClose', 'dbBlock', 'dbInput', 'roomCreateBtn', 'roomJoinForm', 'roomInput', 'roomError', 'roomLocalBtn',
+    'agendaHead', 'agCat', 'agName', 'agLead', 'tabs', 'doneCount', 'nowEmpty', 'nowInfo', 'nowCat', 'nowLimit', 'nowName',
+    'nowLead', 'agMainBtn', 'agMainLabel', 'agStopBtn', 'agResetBtn', 'nowResult', 'agUndoBtn', 'agNextBtn', 'agFilter',
+    'agList', 'resFilter', 'resSummary', 'resList', 'copyResultsBtn', 'csvBtn', 'clearResultsBtn'
   ].forEach(function (id) { el[id] = $(id); });
   var app = el.app;
   var segButtons = Array.prototype.slice.call(document.querySelectorAll('.seg'));
@@ -656,6 +659,7 @@
 
     renderMessage(meta || {});
     renderLaps();
+    renderAgenda();
 
     syncSelect(el.warnSel, s.settings.warnAt);
     syncSelect(el.dangerSel, s.settings.dangerAt);
@@ -731,6 +735,427 @@
     if (select.value !== v) select.value = v;
   }
 
+  // ------------------------------------------------------------ seminar
+
+  var PLAN = window.PROGRAMACAO || null; // programacao.js: who presents, in what order, for how long
+  var planItems = PLAN ? PLAN.itens : [];
+  var planCats = {};
+  var planById = {};
+  if (PLAN) {
+    PLAN.categorias.forEach(function (c) { planCats[c.id] = c; });
+    planItems.forEach(function (i) { planById[i.id] = i; });
+  }
+  var lastCurrent = null;
+
+  function itemMs(item) { return Math.round(item.min * MINUTE); }
+  function mmss(ms) { return Core.clockText(Math.floor(ms / SECOND)); }
+  function pointsText(n) { return n + (n === 1 ? ' ponto' : ' pontos'); }
+  function resultOf(item) { return (state.agenda && state.agenda.results[item.id]) || null; }
+
+  // The presentation on the clock, its registered result (if any) and whether it was stopped.
+  function agendaNow() {
+    var cur = state.agenda && state.agenda.current;
+    var item = cur ? planById[cur] || null : null;
+    return { item: item, result: item ? resultOf(item) : null, registered: !!item && Core.isRegistered(state) };
+  }
+
+  // pendente | andamento | ok | penalizada
+  function itemStatus(item) {
+    var a = state.agenda;
+    var timing = state.timer.startedAt != null || state.timer.elapsed > 0;
+    if (a.current === item.id && !Core.isRegistered(state) && timing) return 'andamento';
+    var r = resultOf(item);
+    if (r) return r.points > 0 ? 'penalizada' : 'ok';
+    return 'pendente';
+  }
+
+  function visibleItems() {
+    return prefs.cat === 'todas' ? planItems : planItems.filter(function (i) { return i.cat === prefs.cat; });
+  }
+
+  function catBadge(node, cat) {
+    node.textContent = cat ? cat.nome : '';
+    node.style.setProperty('--c', cat ? cat.cor : '');
+  }
+
+  function nextItem() {
+    var cur = state.agenda.current;
+    var start = cur ? planItems.findIndex(function (i) { return i.id === cur; }) + 1 : 0;
+    for (var k = 0; k < planItems.length; k++) {
+      var item = planItems[(start + k) % planItems.length];
+      if (!resultOf(item) && item.id !== cur) return item;
+    }
+    return null;
+  }
+
+  function renderAgenda() {
+    if (!PLAN) return;
+    var a = agendaNow();
+    // big screen
+    el.agendaHead.hidden = !a.item;
+    if (a.item) {
+      catBadge(el.agCat, planCats[a.item.cat]);
+      setText(el.agName, a.item.nome);
+      setText(el.agLead, a.item.lider);
+    }
+    el.title.hidden = !state.title || !!a.item;
+    setClass(app, 'is-registered', a.registered);
+    setClass(app, 'has-penalty', a.registered && a.result.points > 0);
+    renderFilters();
+    renderNowPanel(a);
+    renderAgendaList();
+    renderResults();
+  }
+
+  function filterChip(id, label, items, cat) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip' + (prefs.cat === id ? ' active' : '');
+    b.setAttribute('data-cat', id);
+    if (cat) {
+      var dot = document.createElement('span');
+      dot.className = 'dot-c';
+      dot.style.setProperty('--c', cat.cor);
+      b.appendChild(dot);
+    }
+    b.appendChild(document.createTextNode(label));
+    var done = items.filter(function (i) { return resultOf(i); }).length;
+    var small = document.createElement('small');
+    small.textContent = done + '/' + items.length;
+    b.appendChild(small);
+    return b;
+  }
+
+  function renderFilters() {
+    [el.agFilter, el.resFilter].forEach(function (box) {
+      box.textContent = '';
+      box.appendChild(filterChip('todas', 'Todas', planItems, null));
+      PLAN.categorias.forEach(function (c) {
+        box.appendChild(filterChip(c.id, c.nome, planItems.filter(function (i) { return i.cat === c.id; }), c));
+      });
+    });
+  }
+
+  function badgeEl(cat) {
+    var b = document.createElement('span');
+    b.className = 'cat-badge';
+    catBadge(b, cat);
+    return b;
+  }
+
+  function stateChip(item) {
+    var st = itemStatus(item);
+    var r = resultOf(item);
+    var chip = document.createElement('span');
+    chip.className = 'chip-state';
+    if (st === 'andamento') {
+      chip.classList.add('run');
+      chip.textContent = 'Em andamento';
+    } else if (st === 'ok') {
+      chip.classList.add('ok');
+      chip.textContent = '✓ ' + mmss(r.used);
+    } else if (st === 'penalizada') {
+      chip.classList.add('bad');
+      chip.textContent = '−' + pointsText(r.points);
+    } else if (state.agenda.current === item.id) {
+      chip.classList.add('run');
+      chip.textContent = 'Na tela';
+    } else {
+      return null;
+    }
+    return chip;
+  }
+
+  function renderAgendaList() {
+    var scroll = el.agList.scrollTop;
+    el.agList.textContent = '';
+    visibleItems().forEach(function (item) {
+      var li = document.createElement('li');
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ag-item';
+      b.setAttribute('data-id', item.id);
+      var st = itemStatus(item);
+      if (state.agenda.current === item.id) b.classList.add('current');
+      if (st === 'ok' || st === 'penalizada') b.classList.add('done');
+      var time = document.createElement('span');
+      time.className = 'ag-time';
+      time.textContent = item.hora;
+      var text = document.createElement('span');
+      text.className = 'ag-text';
+      var name = document.createElement('strong');
+      name.textContent = item.nome;
+      var lead = document.createElement('small');
+      lead.textContent = item.lider + ' · ' + Core.durationLabel(itemMs(item));
+      text.appendChild(name);
+      text.appendChild(lead);
+      b.appendChild(time);
+      b.appendChild(badgeEl(planCats[item.cat]));
+      b.appendChild(text);
+      var chip = stateChip(item);
+      if (chip) b.appendChild(chip);
+      li.appendChild(b);
+      el.agList.appendChild(li);
+    });
+    el.agList.scrollTop = scroll;
+    if (state.agenda.current !== lastCurrent) {
+      lastCurrent = state.agenda.current;
+      var cur = el.agList.querySelector('.current');
+      if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  function renderNowPanel(a) {
+    el.nowEmpty.hidden = !!a.item;
+    el.nowInfo.hidden = !a.item;
+    if (a.item) {
+      catBadge(el.nowCat, planCats[a.item.cat]);
+      setText(el.nowLimit, 'Tempo: ' + Core.durationLabel(itemMs(a.item)) + ' · previsto às ' + a.item.hora);
+      setText(el.nowName, a.item.nome);
+      setText(el.nowLead, a.item.lider);
+    }
+    var r = a.registered ? a.result : null;
+    el.nowResult.hidden = !r;
+    el.agUndoBtn.hidden = !r;
+    if (r) {
+      el.nowResult.className = 'now-result' + (r.points ? ' bad' : '');
+      el.nowResult.textContent = 'Registrado: ' + mmss(r.used) + ' de ' + mmss(r.allowed) + ' · ' +
+        (r.points ? 'penalidade de ' + pointsText(r.points) : 'sem penalização');
+    }
+    var next = nextItem();
+    var show = !!next && (!a.item || a.registered);
+    el.agNextBtn.hidden = !show;
+    if (show) setText(el.agNextBtn, (a.item ? 'Próxima: ' : 'Começar por: ') + next.nome + ' — ' + next.lider);
+    else if (a.registered && !next) {
+      el.nowResult.hidden = false;
+      el.nowResult.textContent += ' · Todas as apresentações já foram registradas ✓';
+    }
+  }
+
+  function renderResults() {
+    var done = 0;
+    var penalized = 0;
+    var lost = 0;
+    planItems.forEach(function (item) {
+      var r = resultOf(item);
+      if (!r) return;
+      done++;
+      if (r.points) penalized++;
+      lost += r.points;
+    });
+    setText(el.doneCount, done + '/' + planItems.length);
+    setText(el.resSummary, 'Registradas ' + done + ' de ' + planItems.length + ' · Com penalização ' + penalized + ' · Pontos perdidos ' + lost);
+    el.resList.textContent = '';
+    visibleItems().forEach(function (item) {
+      var r = resultOf(item);
+      var li = document.createElement('li');
+      li.className = 'res-row';
+      var name = document.createElement('div');
+      name.className = 'res-name';
+      var time = document.createElement('span');
+      time.className = 'muted small';
+      time.textContent = item.hora;
+      var strong = document.createElement('strong');
+      strong.textContent = item.nome;
+      name.appendChild(time);
+      name.appendChild(badgeEl(planCats[item.cat]));
+      name.appendChild(strong);
+      var lead = document.createElement('div');
+      lead.className = 'res-lead';
+      lead.textContent = item.lider;
+      var when = document.createElement('div');
+      when.className = 'res-time';
+      var main = document.createElement('span');
+      main.textContent = r ? mmss(r.used) : '—';
+      var small = document.createElement('small');
+      small.textContent = 'limite ' + mmss(r ? r.allowed : itemMs(item)) + (r && r.used > r.allowed ? ' · +' + mmss(r.used - r.allowed) : '');
+      when.appendChild(main);
+      when.appendChild(small);
+      var end = document.createElement('div');
+      end.className = 'res-end';
+      var chip = stateChip(item);
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.className = 'chip-state';
+        chip.textContent = 'Pendente';
+      } else if (chip.classList.contains('ok')) {
+        chip.textContent = 'Sem penalização';
+      }
+      end.appendChild(chip);
+      if (r) {
+        var x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'x';
+        x.setAttribute('data-clear', item.id);
+        x.title = 'Apagar o tempo registrado';
+        x.setAttribute('aria-label', 'Apagar o tempo registrado de ' + item.nome);
+        x.textContent = '×';
+        end.appendChild(x);
+      }
+      li.appendChild(name);
+      li.appendChild(when);
+      li.appendChild(lead);
+      li.appendChild(end);
+      el.resList.appendChild(li);
+    });
+  }
+
+  // Seen from the buttons: start/pause, stop and register, reset, next.
+  function updateAgendaButtons(tv) {
+    if (!PLAN) return;
+    var a = agendaNow();
+    var action = tv.running ? 'pause' : 'start';
+    var label = tv.running ? 'Pausar' : a.registered ? 'Feito ✓' : tv.status === 'paused' ? 'Continuar' : 'Iniciar';
+    if (el.agMainBtn.getAttribute('data-action') !== action) el.agMainBtn.setAttribute('data-action', action);
+    setText(el.agMainLabel, label);
+    var noItem = !a.item;
+    var off = noItem || a.registered;
+    if (el.agMainBtn.disabled !== off) el.agMainBtn.disabled = off;
+    var canStop = !off && (tv.running || tv.elapsed >= SECOND);
+    if (el.agStopBtn.disabled !== !canStop) el.agStopBtn.disabled = !canStop;
+    var canReset = !noItem && tv.status !== 'idle';
+    if (el.agResetBtn.disabled !== !canReset) el.agResetBtn.disabled = !canReset;
+  }
+
+  function agendaMainPress() {
+    var a = agendaNow();
+    if (!a.item) {
+      toast('Escolha uma apresentação na lista.', 'warn');
+      return;
+    }
+    if (a.registered) return;
+    var running = Core.timerView(state, serverNow()).running;
+    dispatch({ type: running ? 'pause' : 'start', target: 'timer' });
+  }
+
+  function agendaReset() {
+    var a = agendaNow();
+    if (!a.item) return;
+    var tv = Core.timerView(state, serverNow());
+    if (tv.status === 'idle') return;
+    if (!a.registered && !window.confirm('Zerar o tempo de "' + a.item.nome + '" SEM registrar?')) return;
+    dispatch({ type: 'reset', target: 'timer' });
+  }
+
+  function chooseItem(item) {
+    if (!item) return;
+    var a = agendaNow();
+    var timing = state.timer.startedAt != null || state.timer.elapsed > 0;
+    var inProgress = !!a.item && !a.registered && timing;
+    var force = false;
+    if (inProgress) {
+      if (a.item.id === item.id) return; // already on the clock
+      if (!window.confirm('"' + a.item.nome + '" está em andamento. Trocar mesmo assim? O tempo dela NÃO será registrado.')) return;
+      force = true;
+    } else if (resultOf(item)) {
+      if (!window.confirm('"' + item.nome + '" já tem tempo registrado (' + mmss(resultOf(item).used) + '). Refazer? O tempo antigo só é trocado quando você parar de novo.')) return;
+    }
+    dispatch({ type: 'select', id: item.id, ms: itemMs(item), force: force });
+  }
+
+  function resultRows() {
+    return planItems.map(function (item, i) {
+      var r = resultOf(item);
+      var st = itemStatus(item);
+      var situation = st === 'andamento' ? 'Em andamento' : st === 'ok' ? 'Sem penalização' : st === 'penalizada' ? 'Com penalização' : 'Pendente';
+      var cat = planCats[item.cat];
+      return [i + 1, item.hora, cat ? cat.nome : item.cat, item.nome, item.lider,
+        mmss(r ? r.allowed : itemMs(item)), r ? mmss(r.used) : '', r ? mmss(Math.max(0, r.used - r.allowed)) : '',
+        r ? r.points : '', situation];
+    });
+  }
+
+  var RESULT_HEADER = ['Ordem', 'Horário previsto', 'Categoria', 'Setor / Nome', 'Líder ou grupo', 'Tempo limite', 'Tempo usado', 'Excesso', 'Pontos perdidos', 'Situação'];
+
+  function csvCell(v) {
+    var t = String(v);
+    return /[;"\r\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  }
+
+  function downloadText(name, text, type) {
+    var blob = new Blob(['﻿' + text], { type: type });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function setView(view) {
+    if (!PLAN) view = 'livre';
+    prefs.view = view;
+    savePrefs();
+    ['apres', 'tempos', 'livre'].forEach(function (n) { setClass(app, 'view-' + n, n === view); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-views]'), function (panel) {
+      panel.hidden = (' ' + panel.getAttribute('data-views') + ' ').indexOf(' ' + view + ' ') < 0;
+    });
+    Array.prototype.forEach.call(el.tabs.querySelectorAll('.tab'), function (tab) {
+      var on = tab.getAttribute('data-view') === view;
+      setClass(tab, 'active', on);
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    needFit = true;
+    kick();
+  }
+
+  function bindAgendaEvents() {
+    el.tabs.classList.toggle('off', !PLAN);
+    if (!PLAN) {
+      setView('livre'); // no schedule file: only the free timer
+      return;
+    }
+    el.tabs.addEventListener('click', function (e) {
+      var tab = e.target.closest && e.target.closest('.tab');
+      if (tab) setView(tab.getAttribute('data-view'));
+    });
+    [el.agFilter, el.resFilter].forEach(function (box) {
+      box.addEventListener('click', function (e) {
+        var chip = e.target.closest && e.target.closest('.chip');
+        if (!chip) return;
+        prefs.cat = chip.getAttribute('data-cat');
+        savePrefs();
+        renderAgenda();
+      });
+    });
+    el.agList.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('.ag-item');
+      if (b) chooseItem(planById[b.getAttribute('data-id')]);
+    });
+    el.agMainBtn.addEventListener('click', agendaMainPress);
+    el.agStopBtn.addEventListener('click', function () { dispatch({ type: 'finish' }); });
+    el.agResetBtn.addEventListener('click', agendaReset);
+    el.agUndoBtn.addEventListener('click', function () {
+      var a = agendaNow();
+      if (a.item) dispatch({ type: 'clearResult', id: a.item.id });
+    });
+    el.agNextBtn.addEventListener('click', function () { chooseItem(nextItem()); });
+    el.resList.addEventListener('click', function (e) {
+      var x = e.target.closest && e.target.closest('[data-clear]');
+      if (!x) return;
+      var item = planById[x.getAttribute('data-clear')];
+      if (item && window.confirm('Apagar o tempo registrado de "' + item.nome + '"?')) dispatch({ type: 'clearResult', id: item.id });
+    });
+    el.clearResultsBtn.addEventListener('click', function () {
+      if (window.confirm('Apagar TODOS os tempos registrados? Isso não pode ser desfeito.')) dispatch({ type: 'clearResult', id: '*' });
+    });
+    el.copyResultsBtn.addEventListener('click', function () {
+      var rows = [RESULT_HEADER].concat(resultRows());
+      copyText(rows.map(function (r) { return r.join('\t'); }).join('\n')).then(function () {
+        toast('Tabela copiada: cole no Excel.');
+      }, function () { toast('Não deu para copiar. Use "Baixar CSV".', 'warn'); });
+    });
+    el.csvBtn.addEventListener('click', function () {
+      var rows = [RESULT_HEADER].concat(resultRows());
+      var d = new Date();
+      var name = 'tempos-seminario-' + d.getFullYear() + '-' + Core.pad2(d.getMonth() + 1) + '-' + Core.pad2(d.getDate()) + '.csv';
+      downloadText(name, rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n'), 'text/csv;charset=utf-8');
+    });
+    setView(prefs.view);
+  }
+
   // --------------------------------------------------------- frame loop
 
   var needFit = true;
@@ -777,6 +1202,7 @@
     swapClass('status-' + view.status, 'status');
     setClass(app, 'flashing', isTimer && tv.phase === 'over' && tv.running && tv.remaining > -10 * SECOND);
     updateButtons(tv, sv, isTimer);
+    updateAgendaButtons(tv);
 
     var key = state.mode + '|' + signText + '|' + mainText.length + '|' + fracText.length;
     if (needFit || key !== fitKey) {
@@ -798,6 +1224,17 @@
   }
 
   function timerLabel(tv) {
+    var a = agendaNow();
+    if (a.item) {
+      if (a.registered) {
+        var r = a.result;
+        return 'Registrado · ' + mmss(r.used) + ' de ' + mmss(r.allowed) + ' · ' + (r.points ? 'penalidade −' + pointsText(r.points) : 'sem penalidade');
+      }
+      if (tv.finished && tv.status !== 'idle') {
+        var lost = Core.penaltyPoints(-tv.remaining);
+        return lost ? 'Penalidade: −' + pointsText(lost) : 'Tempo esgotado · penalidade a partir de −01:00';
+      }
+    }
     if (tv.status === 'running') return tv.finished ? 'Tempo esgotado' : 'Termina às ' + hhmm(new Date(Date.now() + tv.remaining));
     if (tv.status === 'paused') return tv.finished ? 'Pausado · tempo esgotado' : 'Pausado';
     if (tv.status === 'finished') return 'Tempo esgotado';
@@ -1083,6 +1520,9 @@
       case 'title': return 'Título alterado por ' + who;
       case 'message': return 'Mensagem atualizada por ' + who;
       case 'settings': return 'Ajustes alterados por ' + who;
+      case 'select': return 'Apresentação escolhida por ' + who;
+      case 'finish': return 'Tempo registrado por ' + who + ': ' + mmss(last.ms || 0);
+      case 'clearResult': return 'Tempo apagado por ' + who;
       default: return 'Atualizado por ' + who;
     }
   }
@@ -1229,7 +1669,10 @@
 
   // --------------------------------------------------------------- input
 
-  function mainPress() { dispatch({ type: mainAction, target: state.mode }); }
+  function mainPress() {
+    if (PLAN && prefs.view === 'apres') agendaMainPress();
+    else dispatch({ type: mainAction, target: state.mode });
+  }
 
   function adjust(ms) {
     if (state.mode === 'timer') dispatch({ type: 'adjust', ms: ms });
@@ -1445,7 +1888,11 @@
     switch (key) {
       case ' ':
       case 'Spacebar': mainPress(); break;
-      case 'r': dispatch({ type: 'reset', target: state.mode }); break;
+      case 'r':
+        if (PLAN && prefs.view === 'apres') agendaReset();
+        else dispatch({ type: 'reset', target: state.mode });
+        break;
+      case 'p': if (agendaNow().item) dispatch({ type: 'finish' }); break;
       case 'v':
       case 'l': if (state.mode === 'stopwatch') dispatch({ type: 'lap' }); break;
       case 't': dispatch({ type: 'mode', mode: 'timer' }); break;
@@ -1482,6 +1929,7 @@
     el.fullscreenBtn.hidden = standalone || !(document.fullscreenEnabled || document.webkitFullscreenEnabled);
 
     bindEvents();
+    bindAgendaEvents();
     renderState({ snapshot: true });
     renderStatus();
     updateSoundButton();

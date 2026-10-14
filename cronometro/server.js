@@ -46,7 +46,8 @@ const VIRTUAL_IFACE = /virtual|vmnet|vbox|vethernet|hyper-v|wsl|docker|br-|veth|
 const ACTION_LABEL = {
   start: 'iniciar', pause: 'pausar', reset: 'zerar', restart: 'reiniciar', set: 'definir tempo',
   adjust: 'ajustar tempo', lap: 'marcar volta', mode: 'trocar tela', title: 'título',
-  message: 'mensagem', settings: 'ajustes'
+  message: 'mensagem', settings: 'ajustes', select: 'escolher apresentação', finish: 'registrar tempo',
+  clearResult: 'apagar tempo registrado'
 };
 
 function createTimerServer(options) {

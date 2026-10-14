@@ -21,6 +21,12 @@
   var MAX_TITLE = 80;
   var MAX_MESSAGE = 140;
   var MAX_NAME = 40;
+  var MAX_RESULTS = 200;
+  var ID_PATTERN = /^[a-z0-9-]{1,24}$/; // keep in step with firebase-rules.json
+
+  // Seminar rule: every FULL minute over the limit costs one point.
+  var PENALTY_MS = 60 * SECOND;
+  var PENALTY_POINTS = 1;
 
   function initialState() {
     return {
@@ -32,6 +38,9 @@
       stopwatch: { elapsed: 0, startedAt: null, laps: [] },
       settings: { warnAt: 2 * MINUTE, dangerAt: 1 * MINUTE, overtime: true },
       message: { text: '', flash: false, id: 0 },
+      // Seminar: the presentation on the clock and what was registered for each one
+      // (results[id] = { used, allowed, points, at, by }, all times in ms).
+      agenda: { current: null, results: {} },
       last: null // last change: { type, target, ms, by: { id, name }, at }
     };
   }
@@ -71,6 +80,18 @@
       .filter(function (k) { return /^\d+$/.test(k); })
       .sort(function (a, b) { return a - b; })
       .map(function (k) { return v[k]; });
+  }
+
+  // Points lost for finishing `overMs` past the limit: 1 per full minute.
+  function penaltyPoints(overMs) {
+    return overMs > 0 ? Math.floor(overMs / PENALTY_MS) * PENALTY_POINTS : 0;
+  }
+
+  // The current presentation was stopped and its time registered (and not touched since).
+  function isRegistered(state) {
+    var a = state.agenda;
+    var r = a && a.current ? a.results[a.current] : null;
+    return !!r && state.timer.startedAt == null && state.timer.elapsed === r.used;
   }
 
   function elapsedOf(clock, now) {
@@ -120,6 +141,21 @@
     s.message.flash = m.flash === true && s.message.text !== '';
     s.message.id = int(m.id, 0, Number.MAX_SAFE_INTEGER, 0);
 
+    var ag = raw.agenda && typeof raw.agenda === 'object' ? raw.agenda : {};
+    s.agenda.current = typeof ag.current === 'string' && ID_PATTERN.test(ag.current) ? ag.current : null;
+    var res = ag.results && typeof ag.results === 'object' ? ag.results : {};
+    Object.keys(res).slice(0, MAX_RESULTS).forEach(function (id) {
+      var r = res[id];
+      if (!ID_PATTERN.test(id) || !r || typeof r !== 'object' || !isNum(r.used) || !isNum(r.allowed)) return;
+      s.agenda.results[id] = {
+        used: int(r.used, 0, MAX_MS * 4, 0),
+        allowed: int(r.allowed, 0, MAX_MS * 4, 0),
+        points: int(r.points, 0, 9999, 0),
+        at: isTime(r.at) ? Math.round(r.at) : 0,
+        by: cleanText(r.by, MAX_NAME)
+      };
+    });
+
     var l = raw.last;
     if (l && typeof l === 'object' && typeof l.type === 'string') {
       s.last = {
@@ -149,10 +185,14 @@
    *   { type: 'title', text }            label above the time
    *   { type: 'message', text, flash? }  banner on every screen ('' clears it)
    *   { type: 'settings', warnAt?, dangerAt?, overtime? }
+   *   { type: 'select', id, ms, force? } seminar: put a presentation on the clock (ms = its limit)
+   *   { type: 'finish' }                 seminar: stop it and register the time used and the points lost
+   *   { type: 'clearResult', id }        seminar: forget a registered time ('*' = all of them)
    */
   function apply(state, cmd, now, by) {
     if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return state;
     var next = clone(state);
+    if (!next.agenda) next.agenda = { current: null, results: {} };
     var t = next.timer;
     var w = next.stopwatch;
     var target = cmd.target === 'timer' || cmd.target === 'stopwatch' ? cmd.target : next.mode;
@@ -173,6 +213,7 @@
         break;
 
       case 'start':
+        if (target === 'timer' && isRegistered(next)) break; // registered: redo it with Zerar
         if (clock.startedAt == null) {
           // A countdown stopped at zero cannot resume; it needs 'restart'.
           var canRun = target === 'timer'
@@ -225,11 +266,13 @@
         t.duration = ms;
         t.elapsed = 0;
         t.startedAt = cmd.start === true ? now : null;
+        next.agenda.current = null; // a free countdown is no presentation
         target = 'timer';
         changed = true;
         break;
 
       case 'adjust':
+        if (isRegistered(next)) break;
         ms = roundSeconds(cmd.ms);
         if (!ms) break;
         ms = clamp(ms, -MAX_MS, MAX_MS);
@@ -242,6 +285,55 @@
         t.duration = spent + newLeft;
         target = 'timer';
         changed = true;
+        break;
+
+      case 'select':
+        value = typeof cmd.id === 'string' && ID_PATTERN.test(cmd.id) ? cmd.id : '';
+        ms = roundSeconds(cmd.ms);
+        if (!value || ms === null) { ms = null; break; }
+        ms = clamp(ms, SECOND, MAX_MS);
+        // A presentation under way is never replaced by accident.
+        if (next.agenda.current && !isRegistered(next) && (t.startedAt != null || t.elapsed > 0) && cmd.force !== true) break;
+        next.agenda.current = value;
+        next.mode = 'timer';
+        next.settings.overtime = true; // the time over the limit is what costs points
+        t.base = ms;
+        t.duration = ms;
+        t.elapsed = 0;
+        t.startedAt = null;
+        target = 'timer';
+        changed = true;
+        break;
+
+      case 'finish':
+        if (!next.agenda.current || isRegistered(next)) break;
+        var used = Math.min(elapsedOf(t, now), MAX_MS);
+        if (used < SECOND) break; // nothing was timed
+        if (!next.agenda.results[next.agenda.current] && Object.keys(next.agenda.results).length >= MAX_RESULTS) break;
+        t.elapsed = used;
+        t.startedAt = null;
+        next.agenda.results[next.agenda.current] = {
+          used: used,
+          allowed: t.duration,
+          points: penaltyPoints(used - t.duration),
+          at: now,
+          by: by ? cleanText(by.name, MAX_NAME) : ''
+        };
+        ms = used;
+        target = 'timer';
+        changed = true;
+        break;
+
+      case 'clearResult':
+        if (cmd.id === '*') {
+          if (!Object.keys(next.agenda.results).length) break;
+          next.agenda.results = {};
+          changed = true;
+        } else if (typeof cmd.id === 'string' && next.agenda.results[cmd.id]) {
+          delete next.agenda.results[cmd.id];
+          changed = true;
+        }
+        target = 'timer';
         break;
 
       case 'lap':
@@ -278,7 +370,8 @@
             changed = true;
           }
         });
-        if (typeof cmd.overtime === 'boolean' && cmd.overtime !== next.settings.overtime) {
+        if (typeof cmd.overtime === 'boolean' && cmd.overtime !== next.settings.overtime &&
+            !(cmd.overtime === false && next.agenda.current && !isRegistered(next))) {
           next.settings.overtime = cmd.overtime;
           settleTimer(t, next.settings, now);
           changed = true;
@@ -399,6 +492,10 @@
     MAX_TITLE: MAX_TITLE,
     MAX_MESSAGE: MAX_MESSAGE,
     MAX_NAME: MAX_NAME,
+    PENALTY_MS: PENALTY_MS,
+    ID_PATTERN: ID_PATTERN,
+    penaltyPoints: penaltyPoints,
+    isRegistered: isRegistered,
     initialState: initialState,
     normalize: normalize,
     apply: apply,
