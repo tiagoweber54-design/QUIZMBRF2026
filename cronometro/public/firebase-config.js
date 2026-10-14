@@ -9,5 +9,5 @@
  * configurar nada.
  */
 window.CRONOMETRO_FIREBASE = {
-  databaseURL: ""
+  databaseURL: "https://cronometro-73d5c-default-rtdb.firebaseio.com"
 };

@@ -142,9 +142,9 @@ Faça isso **no PC da empresa e no iPad**, que são os que podem ter rede mais r
 
 **Nas próximas vezes:** o iPad lembra da sala. Basta abrir o site (ou o ícone na tela de início). Para uma apresentação nova, use **Trocar de sala** no botão de QR code.
 
-### Deixar tudo pré-configurado (opcional)
+### Deixar tudo pré-configurado
 
-Para ninguém precisar colar o endereço do Firebase, abra o arquivo `cronometro/public/firebase-config.js` no GitHub (ícone de lápis), coloque o endereço entre as aspas de `databaseURL: ""` e salve (**Commit changes**). Aí o PC só precisa do site e do código da sala.
+Esta versão já vem configurada com o banco `cronometro-73d5c`. Se você usar outro banco, ou para ninguém precisar colar o endereço do Firebase, abra o arquivo `cronometro/public/firebase-config.js` no GitHub (ícone de lápis), coloque o endereço entre as aspas de `databaseURL: ""` e salve (**Commit changes**). Aí o PC só precisa do site e do código da sala.
 
 ### Dicas para o iPad
 
