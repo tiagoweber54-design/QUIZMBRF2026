@@ -55,12 +55,14 @@ function randomCommand(rand) {
   const target = pick(['timer', 'stopwatch']);
   const id = 'p' + String(1 + Math.floor(rand() * 25)).padStart(2, '0');
   switch (pick(['start', 'start', 'pause', 'reset', 'restart', 'set', 'adjust', 'adjust', 'lap', 'lap', 'mode', 'title', 'message', 'settings',
-    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult', 'alert', 'alert', 'screen', 'screen'])) {
+    'select', 'select', 'select', 'finish', 'finish', 'finish', 'clearResult', 'alert', 'alert', 'screen', 'screen', 'score', 'score', 'score', 'clearScores'])) {
     case 'select': return { type: 'select', id, ms: (1 + Math.floor(rand() * 15)) * 60000, force: rand() < 0.5 };
     case 'finish': return { type: 'finish' };
-    case 'screen': return { type: 'screen', name: pick(['logo', 'timer', 'parodia', 'parodia:p08', 'rank:kaizen', 'rank:all', '']) };
+    case 'screen': return { type: 'screen', name: pick(['logo', 'timer', 'parodia', 'parodia:p08', 'rank:kaizen', 'rank:all', 'rank:placar-sol', 'rank:tempos-chuva', '']) };
     case 'alert': return { type: 'alert', kind: pick(['half', 'last']), text: pick(['Metade do tempo: faltam 4 minutos', 'Falta 1 minuto']) };
     case 'clearResult': return { type: 'clearResult', id: rand() < 0.1 ? '*' : id };
+    case 'score': return { type: 'score', game: pick(['g01', 'g07', 'c08']), team: pick(['laranja', 'verde', 'amarelo', 'azul']), value: pick([0, 10, 50, 999, null, 1500]) };
+    case 'clearScores': return { type: 'clearScores', id: rand() < 0.2 ? '*' : pick(['g01', 'g07']) };
     case 'start': return { type: 'start', target };
     case 'pause': return { type: 'pause', target };
     case 'reset': return { type: 'reset', target };
@@ -214,4 +216,19 @@ test('bad data inside a room is refused', { skip }, async () => {
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'n'.repeat(81) }), 'aparelho com nome longo');
   denied(await put('salas/' + ROOM + '/aparelhos/abc', { nome: 'ok', extra: 1 }), 'aparelho com campo extra');
   denied(await put('salas/' + ROOM + '/aparelhos/' + 'i'.repeat(129), { nome: 'ok' }), 'identificador longo demais');
+});
+
+test('gincana: team points are accepted, wrong teams and wrong numbers are refused', { skip }, async () => {
+  let s = core.initialState();
+  for (const [game, team, value] of [['g01', 'laranja', 10], ['g01', 'verde', 20], ['g07', 'amarelo', 40], ['c08', 'azul', 999]]) {
+    s = core.apply(s, { type: 'score', game, team, value }, 1700000000000, null);
+  }
+  allowed(await put('salas/' + ROOM + '/estado', JSON.parse(JSON.stringify(s))), 'pontos das equipes');
+  const base = JSON.parse(JSON.stringify(s));
+  const bad = (mutate, what) => { const x = JSON.parse(JSON.stringify(base)); mutate(x); return put('salas/' + ROOM + '/estado', x).then((r) => denied(r, what)); };
+  await bad((x) => { x.agenda.scores.g01.roxo = 5; }, 'equipe que não existe');
+  await bad((x) => { x.agenda.scores.g01.verde = 1000; }, 'mais de 999 pontos');
+  await bad((x) => { x.agenda.scores.g01.verde = -1; }, 'ponto negativo');
+  await bad((x) => { x.agenda.scores.g01.verde = 'muito'; }, 'texto no lugar do número');
+  await bad((x) => { x.agenda.scores['G 01'] = { azul: 1 }; }, 'código de jogo inválido');
 });

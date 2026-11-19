@@ -52,6 +52,16 @@
               "last": { ".validate": "newData.isBoolean()" },
               "$other": { ".validate": false }
             },
+            "scores": {
+              "$id": {
+                ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/)",
+                "laranja": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "verde": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "amarelo": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "azul": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "$other": { ".validate": false }
+              }
+            },
             "results": {
               "$id": {
                 ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",

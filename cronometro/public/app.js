@@ -21,7 +21,7 @@
   var ROOM_KEY = 'cronometro-sync.sala';
   var DB_KEY = 'cronometro-sync.db';
   var LOCAL_CHOICE_KEY = 'cronometro-sync.so-local';
-  var PREF_DEFAULTS = { sound: true, clock: true, awake: true, display: false, name: '', view: 'apres', cat: 'todas' };
+  var PREF_DEFAULTS = { sound: true, clock: true, awake: true, display: false, name: '', view: 'apres', cat: 'todas', evento: 'seminario', jogo: '' };
 
   // ------------------------------------------------------------- helpers
 
@@ -100,6 +100,7 @@
     'roomModal', 'roomClose', 'dbBlock', 'dbInput', 'roomCreateBtn', 'roomJoinForm', 'roomInput', 'roomError', 'roomLocalBtn',
     'agendaHead', 'agCat', 'agName', 'agLead', 'tabs', 'doneCount', 'nowEmpty', 'nowInfo', 'nowCat', 'nowLimit', 'nowName',
     'nowLead', 'agMainBtn', 'agMainLabel', 'agStopBtn', 'agResetBtn', 'nowResult', 'agUndoBtn', 'agNextBtn', 'agFilter',
+    'eventBar', 'tabApres', 'tabPontos', 'agTitle', 'resTitle', 'gamePicker', 'scoreCard', 'scoreMatrix', 'scoreShowBtn', 'scoreClearBtn', 'scoreSum',
     'scrNow', 'scrPicker', 'scrRankPicker', 'screens', 'scrLogo', 'scrCall', 'scrParodia', 'scrRank', 'callCat', 'callLead',
     'callName', 'callTime', 'parWord', 'parWho', 'rankTitle', 'rankList', 'rankFoot',
     'agList', 'resFilter', 'resSummary', 'resList', 'copyResultsBtn', 'csvBtn', 'clearResultsBtn'
@@ -746,20 +747,36 @@
 
   // ------------------------------------------------------------ seminar
 
-  var PLAN = window.PROGRAMACAO || null; // programacao.js: who presents, in what order, for how long
-  var planItems = PLAN ? PLAN.itens : [];
+  // programacao.js (the seminar) and gincana.js (Plano Sol / Plano Chuva): who, in what order, for how long.
+  // Every device picks the event it works on; the big screen finds any presentation by its id.
+  var EVENTS = [];
+  if (window.PROGRAMACAO) {
+    EVENTS.push({ id: 'seminario', nome: 'Seminário', curto: 'Seminário', penalidade: true, gincana: false,
+      categorias: window.PROGRAMACAO.categorias, itens: window.PROGRAMACAO.itens });
+  }
+  if (window.GINCANA) window.GINCANA.eventos.forEach(function (e) { EVENTS.push(e); });
+  var EV = EVENTS[0] || null;     // the event this device is working on
+  var PLAN = EV;                  // null: no schedule files, only the free timer
+  var planItems = EV ? EV.itens : [];
   var planCats = {};
   var planById = {};
-  if (PLAN) {
-    PLAN.categorias.forEach(function (c) { planCats[c.id] = c; });
-    planItems.forEach(function (i) { planById[i.id] = i; });
-  }
+  var eventOfItem = {};
+  EVENTS.forEach(function (ev) {
+    ev.categorias.forEach(function (c) { planCats[c.id] = c; });
+    ev.itens.forEach(function (i) { planById[i.id] = i; eventOfItem[i.id] = ev; });
+  });
+  function evById(id) { return EVENTS.filter(function (e) { return e.id === id; })[0] || null; }
+  function evOf(item) { return (item && eventOfItem[item.id]) || EV; }
+  function penal(item) { return evOf(item).penalidade !== false; }
+  EV = evById(prefs.evento) || EV;
+  planItems = EV ? EV.itens : [];
   var lastCurrent = null;
 
   function isVideo(item) { return !!(planCats[item.cat] && planCats[item.cat].video); }
   // The slot of one presentation: its own time, else its category's standard time.
   function itemMs(item) { return Math.round((item.min || (planCats[item.cat] && planCats[item.cat].min) || 0) * MINUTE); }
-  function timed() { return planItems.filter(function (i) { return !isVideo(i); }); }
+  function timedOf(ev) { return ev.itens.filter(function (i) { return !isVideo(i); }); }
+  function timed() { return timedOf(EV); }
   function mmss(ms) { return Core.clockText(Math.floor(ms / SECOND)); }
   function pointsText(n) { return n + (n === 1 ? ' ponto' : ' pontos'); }
   function resultOf(item) { return (state.agenda && state.agenda.results[item.id]) || null; }
@@ -777,7 +794,7 @@
     var timing = state.timer.startedAt != null || state.timer.elapsed > 0;
     if (a.current === item.id && !Core.isRegistered(state) && timing) return 'andamento';
     var r = resultOf(item);
-    if (r) return r.points > 0 ? 'penalizada' : 'ok';
+    if (r) return r.points > 0 && penal(item) ? 'penalizada' : 'ok';
     return 'pendente';
   }
 
@@ -812,11 +829,12 @@
     }
     el.title.hidden = !state.title || !!a.item;
     setClass(app, 'is-registered', a.registered);
-    setClass(app, 'has-penalty', a.registered && a.result.points > 0);
+    setClass(app, 'has-penalty', a.registered && a.result.points > 0 && penal(a.item));
     renderFilters();
     renderNowPanel(a);
     renderAgendaList();
     renderResults();
+    renderScores();
   }
 
   function filterChip(id, label, items, cat) {
@@ -846,7 +864,7 @@
     [el.agFilter, el.resFilter].forEach(function (box) {
       box.textContent = '';
       box.appendChild(filterChip('todas', 'Todas', planItems, null));
-      PLAN.categorias.forEach(function (c) {
+      EV.categorias.forEach(function (c) {
         box.appendChild(filterChip(c.id, c.nome, planItems.filter(function (i) { return i.cat === c.id; }), c));
       });
     });
@@ -927,6 +945,7 @@
   }
 
   function renderNowPanel(a) {
+    setText(el.nowEmpty, 'Escolha ' + (EV.gincana ? 'uma brincadeira' : 'uma apresentação') + ' na lista abaixo.');
     el.nowEmpty.hidden = !!a.item;
     el.nowInfo.hidden = !a.item;
     if (a.item) {
@@ -939,9 +958,9 @@
     el.nowResult.hidden = !r;
     el.agUndoBtn.hidden = !r;
     if (r) {
-      el.nowResult.className = 'now-result' + (r.points ? ' bad' : '');
-      el.nowResult.textContent = 'Registrado: ' + mmss(r.used) + ' de ' + mmss(r.allowed) + ' · ' +
-        (r.points ? 'penalidade de ' + pointsText(r.points) : 'sem penalização');
+      el.nowResult.className = 'now-result' + (r.points && penal(a.item) ? ' bad' : '');
+      el.nowResult.textContent = 'Registrado: ' + mmss(r.used) + ' de ' + mmss(r.allowed) + (!penal(a.item) ? '' : ' · ' +
+        (r.points ? 'penalidade de ' + pointsText(r.points) : 'sem penalização'));
     }
     var next = nextItem();
     var show = !!next && (!a.item || a.registered);
@@ -949,7 +968,7 @@
     if (show) setText(el.agNextBtn, (a.item ? 'Próxima: ' : 'Começar por: ') + next.nome + ' — ' + next.lider);
     else if (a.registered && !next) {
       el.nowResult.hidden = false;
-      el.nowResult.textContent += ' · Todas as apresentações já foram registradas ✓';
+      el.nowResult.textContent += ' · ' + (EV.gincana ? 'Todas as brincadeiras já foram registradas ✓' : 'Todas as apresentações já foram registradas ✓');
     }
   }
 
@@ -966,7 +985,13 @@
       lost += r.points;
     });
     setText(el.doneCount, done + '/' + own.length);
-    setText(el.resSummary, 'Registradas ' + done + ' de ' + own.length + ' · Com penalização ' + penalized + ' · Pontos perdidos ' + lost);
+    if (EV.penalidade === false) {
+      var usedSum = 0;
+      own.forEach(function (item) { var r = resultOf(item); if (r) usedSum += r.used; });
+      setText(el.resSummary, 'Registradas ' + done + ' de ' + own.length + ' · Tempo total usado ' + mmss(usedSum));
+    } else {
+      setText(el.resSummary, 'Registradas ' + done + ' de ' + own.length + ' · Com penalização ' + penalized + ' · Pontos perdidos ' + lost);
+    }
     el.resList.textContent = '';
     visibleItems().filter(function (item) { return !isVideo(item); }).forEach(function (item) {
       var r = resultOf(item);
@@ -1001,7 +1026,7 @@
         chip.className = 'chip-state';
         chip.textContent = 'Pendente';
       } else if (chip.classList.contains('ok')) {
-        chip.textContent = 'Sem penalização';
+        chip.textContent = EV.penalidade === false ? 'Concluída' : 'Sem penalização';
       }
       end.appendChild(chip);
       if (r) {
@@ -1032,10 +1057,10 @@
 
   // Seminar order, except that the board puts who lost fewer points first and the
   // presentations still to come last.
-  function rankRows(catId) {
-    return timed()
+  function rankRows(ev, catId) {
+    return timedOf(ev)
       .filter(function (i) { return catId === 'all' || i.cat === catId; })
-      .map(function (item) { return { item: item, r: resultOf(item), order: planItems.indexOf(item) }; })
+      .map(function (item) { return { item: item, r: resultOf(item), order: ev.itens.indexOf(item) }; })
       .sort(function (a, b) {
         if (!a.r !== !b.r) return a.r ? -1 : 1;
         if (a.r && a.r.points !== b.r.points) return a.r.points - b.r.points;
@@ -1050,14 +1075,65 @@
     return n;
   }
 
-  function renderRank(catId) {
-    var cat = planCats[catId] || null;
-    var rows = rankRows(catId);
-    var all = catId === 'all';
-    var color = cat ? cat.cor : '#1f3a5f';
-    el.scrRank.style.setProperty('--c', color);
+  // What a results board is about: 'all' | <category> (the seminar), 'placar-<event>' or 'tempos-<event>' (a gincana).
+  function parseRank(arg) {
+    var m = /^(placar|tempos)-([a-z0-9-]+)$/.exec(arg);
+    if (m) {
+      var ev = evById(m[2]);
+      return ev && ev.gincana ? { kind: m[1], ev: ev } : null;
+    }
+    var sem = evById('seminario');
+    if (sem && (arg === 'all' || planCats[arg])) return { kind: arg === 'all' ? 'all' : 'cat', ev: sem, cat: planCats[arg] || null };
+    return null;
+  }
+
+  // Gincana: total of each team, who won how many games (the tie-break), best first.
+  function gameBest(ev, scores, game) {
+    var row = scores[game.id];
+    if (!row) return 0;
+    return Math.max.apply(null, ev.equipes.map(function (t) { return row[t.id] || 0; }));
+  }
+
+  function standings(ev) {
+    var scores = state.agenda.scores || {};
+    var rows = ev.equipes.map(function (team, order) {
+      var total = 0;
+      var wins = 0;
+      ev.itens.forEach(function (game) {
+        var row = scores[game.id];
+        var v = row ? row[team.id] : undefined;
+        if (v === undefined) return;
+        total += v;
+        var best = gameBest(ev, scores, game);
+        if (best > 0 && v === best) wins++;
+      });
+      return { team: team, total: total, wins: wins, order: order };
+    });
+    rows.sort(function (a, b) { return b.total - a.total || b.wins - a.wins || a.order - b.order; });
+    rows.forEach(function (r, i) {
+      var prev = rows[i - 1];
+      r.pos = prev && prev.total === r.total && prev.wins === r.wins ? prev.pos : i + 1;
+    });
+    return rows;
+  }
+
+  function scoredGames(ev) {
+    var scores = state.agenda.scores || {};
+    return ev.itens.filter(function (g) { return scores[g.id] && Object.keys(scores[g.id]).length; }).length;
+  }
+
+  function maxPoints(ev) {
+    return ev.itens.reduce(function (sum, g) { return sum + (g.pts || 0); }, 0);
+  }
+
+  function renderRankSeminar(info) {
+    var cat = info.cat;
+    var rows = rankRows(info.ev, info.kind === 'all' ? 'all' : cat.id);
+    var all = info.kind === 'all';
+    el.scrRank.style.setProperty('--c', cat ? cat.cor : '#1f3a5f');
     setText(el.rankTitle, all ? 'Todas as apresentações' : cat.nome);
     setClass(el.scrRank, 'two-cols', rows.length > 9);
+    el.rankList.className = 'rank-list';
     el.rankList.style.setProperty('--n', String(Math.ceil(rows.length / (rows.length > 9 ? 2 : 1))));
     el.rankList.textContent = '';
     var lost = 0;
@@ -1090,6 +1166,71 @@
       mmss(usedTotal) + ' · ' + (lost ? 'pontos perdidos: ' + lost : 'nenhum ponto perdido'));
   }
 
+  // Gincana: the time each game took.
+  function renderRankTempos(ev) {
+    var rows = timedOf(ev);
+    el.scrRank.style.setProperty('--c', '#1f3a5f');
+    setText(el.rankTitle, 'Tempos das provas');
+    setClass(el.scrRank, 'two-cols', false);
+    el.rankList.className = 'rank-list';
+    el.rankList.style.setProperty('--n', String(rows.length));
+    el.rankList.textContent = '';
+    var done = 0;
+    var usedTotal = 0;
+    rows.forEach(function (item, idx) {
+      var r = resultOf(item);
+      if (r) { done++; usedTotal += r.used; }
+      var over = r && r.used > r.allowed;
+      var li = textEl('li', 'rank-row' + (r ? (over ? ' bad' : ' ok') : ' wait'));
+      var who = textEl('span', 'rank-who');
+      var strong = textEl('strong', null, item.nome);
+      var dot = textEl('i', 'rank-dot');
+      dot.style.setProperty('--c', planCats[item.cat].cor);
+      strong.insertBefore(dot, strong.firstChild);
+      who.appendChild(strong);
+      who.appendChild(textEl('small', null, planCats[item.cat].nome + ' · limite ' + mmss(itemMs(item))));
+      var time = textEl('span', 'rank-time', r ? mmss(r.used) : '—');
+      time.appendChild(textEl('small', null, r ? (over ? '+' + mmss(r.used - r.allowed) : 'no tempo') : 'pendente'));
+      li.appendChild(textEl('span', 'rank-pos', String(idx + 1)));
+      li.appendChild(who);
+      li.appendChild(time);
+      li.appendChild(textEl('span', 'rank-pts', r ? (over ? '' : '✓') : ''));
+      el.rankList.appendChild(li);
+    });
+    setText(el.rankFoot, done + ' de ' + rows.length + ' provas · tempo total ' + mmss(usedTotal));
+  }
+
+  // Gincana: the scoreboard, best team on top.
+  function renderRankPlacar(ev) {
+    var rows = standings(ev);
+    el.scrRank.style.setProperty('--c', '#1f3a5f');
+    setText(el.rankTitle, 'Placar · ' + ev.curto.replace(/^\S+\s/, ''));
+    setClass(el.scrRank, 'two-cols', false);
+    el.rankList.className = 'rank-list teams';
+    el.rankList.style.setProperty('--n', String(rows.length));
+    el.rankList.textContent = '';
+    rows.forEach(function (row) {
+      var li = textEl('li', 'team-row');
+      li.style.setProperty('--tc', row.team.cor);
+      li.style.setProperty('--ti', row.team.tinta);
+      li.appendChild(textEl('span', 'team-pos', row.pos + 'º'));
+      var who = textEl('span', 'team-who');
+      who.appendChild(textEl('strong', null, row.team.nome));
+      who.appendChild(textEl('small', null, 'Líder: ' + row.team.lider + (row.wins ? ' · ' + row.wins + (row.wins === 1 ? ' vitória' : ' vitórias') : '')));
+      li.appendChild(who);
+      li.appendChild(textEl('span', 'team-total', String(row.total)));
+      el.rankList.appendChild(li);
+    });
+    var max = maxPoints(ev);
+    setText(el.rankFoot, scoredGames(ev) + ' de ' + ev.itens.length + ' provas pontuadas' + (max ? ' · máximo ' + max + ' pontos' : ''));
+  }
+
+  function renderRank(info) {
+    if (info.kind === 'placar') renderRankPlacar(info.ev);
+    else if (info.kind === 'tempos') renderRankTempos(info.ev);
+    else renderRankSeminar(info);
+  }
+
   // Which of the big views is up, and what it says. Changes fade (see .scr in style.css).
   function renderScreens() {
     if (!PLAN) return;
@@ -1097,13 +1238,15 @@
     var name = sc.name;
     var item = null;
     var cat = null;
+    var rankInfo = null;
     if (name === 'call') {
       item = planById[sc.arg] || null;
       if (!item) name = 'logo';
     } else if (name === 'parodia') {
       item = sc.arg ? planById[sc.arg] || null : null;
     } else if (name === 'rank') {
-      if (sc.arg !== 'all' && !planCats[sc.arg]) name = 'logo';
+      rankInfo = parseRank(sc.arg);
+      if (!rankInfo) name = 'logo';
     } else if (name !== 'logo') {
       name = 'timer';
     }
@@ -1111,22 +1254,23 @@
 
     // texts, only when what they say changes (the view that fades out keeps its words)
     var key = name + '|' + sc.arg;
-    var fillKey = key + '|' + (name === 'rank' ? JSON.stringify(state.agenda.results) : '');
+    var fillKey = key + '|' + (name === 'rank' ? JSON.stringify([state.agenda.results, state.agenda.scores]) : '');
     if (fillKey !== screenKey) {
       screenKey = fillKey;
       if (name === 'call') {
         el.scrCall.style.setProperty('--c', cat.cor);
         setText(el.callCat, cat.nome);
-        setText(el.callLead, item.lider);
-        setText(el.callName, item.nome);
-        setText(el.callTime, 'Tempo: ' + Core.durationLabel(itemMs(item)));
+        var game = evOf(item).gincana; // a game: its name big, the rule small; a presentation: who, then what
+        setText(el.callLead, game ? item.nome : item.lider);
+        setText(el.callName, game ? item.lider : item.nome);
+        setText(el.callTime, 'Tempo: ' + Core.durationLabel(itemMs(item)) + (game && item.pts ? ' · vale ' + item.pts + ' pts' : ''));
       } else if (name === 'parodia') {
         var pc = videoCat || { cor: '#e5502f' };
         el.scrParodia.style.setProperty('--c', pc.cor);
         setText(el.parWord, (videoCat ? videoCat.nome : 'Paródia').toUpperCase());
         setText(el.parWho, item ? item.lider + ' · ' + item.nome : '');
       } else if (name === 'rank') {
-        renderRank(sc.arg);
+        renderRank(rankInfo);
       }
       needFit = true;
     }
@@ -1155,7 +1299,12 @@
     if (name === 'logo') return state.agenda.screen ? 'logo MBRF' : 'logo MBRF (automático)';
     if (name === 'call') return 'chamada do grupo';
     if (name === 'parodia') return 'Paródia';
-    if (name === 'rank') return 'tempos · ' + (sc.arg === 'all' ? 'total' : planCats[sc.arg].nome);
+    if (name === 'rank') {
+      var info = parseRank(sc.arg);
+      if (info && info.kind === 'placar') return 'placar';
+      if (info && info.kind === 'tempos') return 'tempos das provas';
+      return 'tempos · ' + (sc.arg === 'all' ? 'total' : planCats[sc.arg].nome);
+    }
     return 'cronômetro';
   }
 
@@ -1173,19 +1322,24 @@
 
   function buildRankPicker() {
     el.scrRankPicker.textContent = '';
-    PLAN.categorias.filter(function (c) { return !c.video; }).forEach(function (c) {
-      var b = textEl('button', 'chip', c.nome);
+    function chip(label, screen, cat) {
+      var b = textEl('button', 'chip', label);
       b.type = 'button';
-      b.setAttribute('data-screen', 'rank:' + c.id);
-      var dot = textEl('span', 'dot-c');
-      dot.style.setProperty('--c', c.cor);
-      b.insertBefore(dot, b.firstChild);
+      b.setAttribute('data-screen', screen);
+      if (cat) {
+        var dot = textEl('span', 'dot-c');
+        dot.style.setProperty('--c', cat.cor);
+        b.insertBefore(dot, b.firstChild);
+      }
       el.scrRankPicker.appendChild(b);
-    });
-    var all = textEl('button', 'chip', 'Total');
-    all.type = 'button';
-    all.setAttribute('data-screen', 'rank:all');
-    el.scrRankPicker.appendChild(all);
+    }
+    if (EV.gincana) {
+      chip('Placar', 'rank:placar-' + EV.id, null);
+      chip('Tempos das provas', 'rank:tempos-' + EV.id, null);
+      return;
+    }
+    EV.categorias.filter(function (c) { return !c.video; }).forEach(function (c) { chip(c.nome, 'rank:' + c.id, c); });
+    chip('Total', 'rank:all', null);
   }
 
   // Shrinks a text until it fits its box (long names, several lines).
@@ -1229,7 +1383,9 @@
     var wall = Date.now();
     if (!kind || wall - alertTried[kind] < 2500) return;
     alertTried[kind] = wall;
-    var text = kind === 'half' ? 'Metade do tempo: faltam ' + Math.round(tv.duration / 2 / MINUTE) + ' minutos' : 'Falta 1 minuto';
+    var halfMs = Math.round(tv.duration / 2 / SECOND) * SECOND;
+    var halfText = halfMs % MINUTE === 0 ? halfMs / MINUTE + ' minutos' : Core.durationLabel(halfMs);
+    var text = kind === 'half' ? 'Metade do tempo: faltam ' + halfText : 'Falta 1 minuto';
     dispatch({ type: 'alert', kind: kind, text: text });
   }
 
@@ -1304,7 +1460,26 @@
     });
   }
 
+  var GAME_HEADER = ['Ordem', 'Horário previsto', 'Local', 'Brincadeira', 'Regra', 'Tempo limite', 'Tempo usado', 'Excesso'];
   var RESULT_HEADER = ['Ordem', 'Horário previsto', 'Categoria', 'Setor / Nome', 'Líder ou grupo', 'Tempo limite', 'Tempo usado', 'Excesso', 'Pontos perdidos', 'Situação'];
+
+  // The table that goes to Excel: the seminar's times and penalties, or the gincana's times and points.
+  function resultTable() {
+    if (!EV.gincana) return [RESULT_HEADER].concat(resultRows());
+    var scores = state.agenda.scores || {};
+    var header = GAME_HEADER.concat(EV.equipes.map(function (t) { return t.nome; }));
+    var totals = standings(EV);
+    var rows = EV.itens.map(function (item, i) {
+      var r = resultOf(item);
+      var row = scores[item.id] || {};
+      return [i + 1, item.hora, planCats[item.cat].nome, item.nome, item.lider, mmss(r ? r.allowed : itemMs(item)),
+        r ? mmss(r.used) : '', r ? mmss(Math.max(0, r.used - r.allowed)) : ''].concat(EV.equipes.map(function (t) { return row[t.id] !== undefined ? row[t.id] : ''; }));
+    });
+    var sum = ['', '', '', 'TOTAL', '', '', '', ''].concat(EV.equipes.map(function (t) {
+      return totals.filter(function (x) { return x.team.id === t.id; })[0].total;
+    }));
+    return [header].concat(rows, [sum]);
+  }
 
   function csvCell(v) {
     var t = String(v);
@@ -1325,9 +1500,10 @@
 
   function setView(view) {
     if (!PLAN) view = 'livre';
+    if (view === 'pontos' && !(EV && EV.gincana)) view = 'apres';
     prefs.view = view;
     savePrefs();
-    ['apres', 'tempos', 'livre'].forEach(function (n) { setClass(app, 'view-' + n, n === view); });
+    ['apres', 'tempos', 'livre', 'pontos'].forEach(function (n) { setClass(app, 'view-' + n, n === view); });
     Array.prototype.forEach.call(document.querySelectorAll('[data-views]'), function (panel) {
       panel.hidden = (' ' + panel.getAttribute('data-views') + ' ').indexOf(' ' + view + ' ') < 0;
     });
@@ -1338,6 +1514,222 @@
     });
     needFit = true;
     kick();
+  }
+
+  // ---------------------------------------------------- events and gincana
+
+  function buildEventBar() {
+    el.eventBar.hidden = EVENTS.length < 2;
+    el.eventBar.textContent = '';
+    EVENTS.forEach(function (ev) {
+      var b = textEl('button', 'chip' + (ev === EV ? ' active' : ''), ev.gincana ? 'Líderes 19/11 · ' + ev.curto : ev.nome);
+      b.type = 'button';
+      b.setAttribute('data-event', ev.id);
+      el.eventBar.appendChild(b);
+    });
+  }
+
+  function applyEventUi() {
+    setText(el.tabApres, EV.gincana ? 'Brincadeiras' : 'Apresentações');
+    el.tabPontos.hidden = !EV.gincana;
+    setText(el.agTitle, EV.gincana ? 'Brincadeiras, na ordem oficial' : 'Apresentações, na ordem do seminário');
+    var chipParodia = el.scrPicker.querySelector('[data-screen="parodia"]');
+    if (chipParodia) chipParodia.hidden = !!EV.gincana;
+    buildEventBar();
+    buildRankPicker();
+  }
+
+  function setEvent(id) {
+    var ev = evById(id);
+    if (!ev || ev === EV) return;
+    EV = ev;
+    planItems = ev.itens;
+    prefs.evento = id;
+    prefs.cat = 'todas';
+    prefs.jogo = '';
+    scoreKey = '';
+    savePrefs();
+    applyEventUi();
+    setView(prefs.view);
+    renderAgenda();
+    renderScreens();
+  }
+
+  var scoreKey = '';
+  var scoreFollow = null;
+
+  function scoreGame() {
+    return EV.itens.filter(function (g) { return g.id === prefs.jogo; })[0] || EV.itens[0];
+  }
+
+  function scoreOf(gameId, team) {
+    var row = (state.agenda.scores || {})[gameId];
+    return row && row[team] !== undefined ? row[team] : null;
+  }
+
+  function buildScoreCard(game) {
+    el.scoreCard.textContent = '';
+    var head = textEl('div', 'score-head');
+    head.appendChild(textEl('strong', null, game.nome));
+    head.appendChild(textEl('small', null, planCats[game.cat].nome + ' · ' + game.lider));
+    el.scoreCard.appendChild(head);
+    EV.equipes.forEach(function (team) {
+      var row = textEl('div', 'score-row');
+      row.setAttribute('data-team', team.id);
+      row.style.setProperty('--tc', team.cor);
+      row.style.setProperty('--ti', team.tinta);
+      var tag = textEl('span', 'score-tag');
+      tag.appendChild(textEl('strong', null, team.nome));
+      tag.appendChild(textEl('small', null, team.lider));
+      row.appendChild(tag);
+      var minus = textEl('button', 'step', '−');
+      minus.type = 'button';
+      minus.setAttribute('data-act', 'minus');
+      minus.setAttribute('aria-label', 'Tirar pontos da equipe ' + team.nome);
+      var input = textEl('input', 'score-in');
+      input.type = 'number';
+      input.min = '0';
+      input.max = String(Core.MAX_SCORE);
+      input.setAttribute('inputmode', 'numeric');
+      input.setAttribute('placeholder', '—');
+      input.setAttribute('aria-label', 'Pontos da equipe ' + team.nome + ' em ' + game.nome);
+      var plus = textEl('button', 'step', '+');
+      plus.type = 'button';
+      plus.setAttribute('data-act', 'plus');
+      plus.setAttribute('aria-label', 'Somar pontos para a equipe ' + team.nome);
+      row.appendChild(minus);
+      row.appendChild(input);
+      row.appendChild(plus);
+      if (game.pts) {
+        var max = textEl('button', 'step max', 'Máx ' + game.pts);
+        max.type = 'button';
+        max.setAttribute('data-act', 'max');
+        row.appendChild(max);
+      }
+      el.scoreCard.appendChild(row);
+    });
+  }
+
+  function renderScores() {
+    if (!EV.gincana) return;
+    var cur = state.agenda.current;
+    if (cur !== scoreFollow) {
+      scoreFollow = cur;
+      if (cur && EV.itens.some(function (g) { return g.id === cur; })) {
+        prefs.jogo = cur;
+        savePrefs();
+      }
+    }
+    var game = scoreGame();
+    el.gamePicker.textContent = '';
+    EV.itens.forEach(function (g, idx) {
+      var all = EV.equipes.every(function (t) { return scoreOf(g.id, t.id) !== null; });
+      var b = textEl('button', 'game-btn' + (g === game ? ' active' : '') + (all ? ' done' : '') + (g.id === cur ? ' live' : ''), String(idx + 1));
+      b.type = 'button';
+      b.setAttribute('data-game', g.id);
+      b.title = g.nome;
+      b.setAttribute('aria-label', 'Brincadeira ' + (idx + 1) + ': ' + g.nome);
+      el.gamePicker.appendChild(b);
+    });
+    var key = EV.id + '|' + game.id;
+    if (key !== scoreKey) {
+      scoreKey = key;
+      buildScoreCard(game);
+    }
+    Array.prototype.forEach.call(el.scoreCard.querySelectorAll('.score-row'), function (row) {
+      var v = scoreOf(game.id, row.getAttribute('data-team'));
+      var input = row.querySelector('input');
+      if (document.activeElement !== input) input.value = v === null ? '' : String(v);
+      setClass(row, 'set', v !== null);
+    });
+    renderMatrix(game);
+  }
+
+  function renderMatrix(game) {
+    var rows = standings(EV);
+    var scores = state.agenda.scores || {};
+    var table = document.createElement('table');
+    var head = table.createTHead().insertRow();
+    head.appendChild(textEl('th', null, 'Equipe'));
+    head.appendChild(textEl('th', 'sum', 'Total'));
+    EV.itens.forEach(function (g, idx) {
+      var th = textEl('th', g === game ? 'on' : '');
+      var b = textEl('button', null, String(idx + 1));
+      b.type = 'button';
+      b.title = g.nome;
+      b.setAttribute('data-game', g.id);
+      th.appendChild(b);
+      head.appendChild(th);
+    });
+    var body = table.createTBody();
+    rows.forEach(function (r) {
+      var tr = body.insertRow();
+      var th = textEl('th', 'team');
+      th.style.setProperty('--tc', r.team.cor);
+      th.style.setProperty('--ti', r.team.tinta);
+      th.appendChild(textEl('span', 'pos', r.pos + 'º'));
+      th.appendChild(document.createTextNode(' ' + r.team.nome));
+      tr.appendChild(th);
+      var total = textEl('td', 'sum');
+      total.appendChild(textEl('strong', null, String(r.total)));
+      if (r.wins) total.appendChild(textEl('small', null, ' ' + r.wins + '×1º'));
+      tr.appendChild(total);
+      EV.itens.forEach(function (g) {
+        var v = scoreOf(g.id, r.team.id);
+        var best = gameBest(EV, scores, g);
+        var td = textEl('td', (v !== null && best > 0 && v === best ? 'best' : '') + (g === game ? ' on' : ''), v === null ? '·' : String(v));
+        tr.appendChild(td);
+      });
+    });
+    el.scoreMatrix.textContent = '';
+    el.scoreMatrix.appendChild(table);
+    var max = maxPoints(EV);
+    var tie = rows.some(function (r, i) { return i > 0 && r.pos === rows[i - 1].pos && r.pos === 1; });
+    setText(el.scoreSum, scoredGames(EV) + ' de ' + EV.itens.length + ' brincadeiras pontuadas' + (max ? ' · máximo ' + max + ' pontos' : '') +
+      (tie ? ' · EMPATE no 1º lugar: desempate relâmpago (pênalti ou mímica / balão no pé)' : ''));
+    var shown = state.agenda.screen === 'rank:placar-' + EV.id;
+    setText(el.scoreShowBtn, shown ? 'Tirar o placar do tablet' : 'Mostrar o placar no tablet');
+    setClass(el.scoreShowBtn, 'btn-accent', !shown);
+  }
+
+  function bindScoreEvents() {
+    el.gamePicker.addEventListener('click', pickGame);
+    el.scoreMatrix.addEventListener('click', pickGame);
+    function pickGame(e) {
+      var b = e.target.closest && e.target.closest('[data-game]');
+      if (!b) return;
+      prefs.jogo = b.getAttribute('data-game');
+      savePrefs();
+      renderScores();
+    }
+    el.scoreCard.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-act]');
+      if (!b) return;
+      var team = b.closest('.score-row').getAttribute('data-team');
+      var game = scoreGame();
+      var cur = scoreOf(game.id, team) || 0;
+      var step = game.passo || 5;
+      var v = b.getAttribute('data-act') === 'plus' ? cur + step : b.getAttribute('data-act') === 'minus' ? Math.max(0, cur - step) : game.pts;
+      if (game.pts && v > game.pts) v = game.pts;
+      dispatch({ type: 'score', game: game.id, team: team, value: v });
+    });
+    el.scoreCard.addEventListener('change', function (e) {
+      var input = e.target;
+      if (!input || !input.matches || !input.matches('.score-in')) return;
+      var team = input.closest('.score-row').getAttribute('data-team');
+      var text = input.value.trim();
+      var v = text === '' ? null : Math.max(0, Math.round(Number(text)));
+      if (v !== null && !isFinite(v)) { renderScores(); return; }
+      dispatch({ type: 'score', game: scoreGame().id, team: team, value: v });
+    });
+    el.scoreShowBtn.addEventListener('click', function () { toggleScreen('rank:placar-' + EV.id); });
+    el.scoreClearBtn.addEventListener('click', function () {
+      if (window.confirm('Apagar TODOS os pontos lançados das equipes? Isso não pode ser desfeito.')) dispatch({ type: 'clearScores', id: '*' });
+    });
+    el.eventBar.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-event]');
+      if (b) setEvent(b.getAttribute('data-event'));
+    });
   }
 
   function bindAgendaEvents() {
@@ -1393,18 +1785,19 @@
       if (window.confirm('Apagar TODOS os tempos registrados? Isso não pode ser desfeito.')) dispatch({ type: 'clearResult', id: '*' });
     });
     el.copyResultsBtn.addEventListener('click', function () {
-      var rows = [RESULT_HEADER].concat(resultRows());
+      var rows = resultTable();
       copyText(rows.map(function (r) { return r.join('\t'); }).join('\n')).then(function () {
         toast('Tabela copiada: cole no Excel.');
       }, function () { toast('Não deu para copiar. Use "Baixar CSV".', 'warn'); });
     });
     el.csvBtn.addEventListener('click', function () {
-      var rows = [RESULT_HEADER].concat(resultRows());
+      var rows = resultTable();
       var d = new Date();
-      var name = 'tempos-seminario-' + d.getFullYear() + '-' + Core.pad2(d.getMonth() + 1) + '-' + Core.pad2(d.getDate()) + '.csv';
+      var name = (EV.gincana ? 'gincana-' + EV.id + '-' : 'tempos-seminario-') + d.getFullYear() + '-' + Core.pad2(d.getMonth() + 1) + '-' + Core.pad2(d.getDate()) + '.csv';
       downloadText(name, rows.map(function (r) { return r.map(csvCell).join(';'); }).join('\r\n'), 'text/csv;charset=utf-8');
     });
-    buildRankPicker();
+    bindScoreEvents();
+    applyEventUi();
     setView(prefs.view);
   }
 
@@ -1487,9 +1880,10 @@
     if (a.item) {
       if (a.registered) {
         var r = a.result;
+        if (!penal(a.item)) return 'Registrado · ' + mmss(r.used) + ' de ' + mmss(r.allowed);
         return 'Registrado · ' + mmss(r.used) + ' de ' + mmss(r.allowed) + ' · ' + (r.points ? 'penalidade −' + pointsText(r.points) : 'sem penalidade');
       }
-      if (tv.finished && tv.status !== 'idle') {
+      if (tv.finished && tv.status !== 'idle' && penal(a.item)) {
         var lost = Core.penaltyPoints(-tv.remaining);
         return lost ? 'Penalidade: −' + pointsText(lost) : 'Tempo esgotado · penalidade a partir de −01:00';
       }
@@ -1789,6 +2183,8 @@
       case 'select': return 'Apresentação escolhida por ' + who;
       case 'finish': return 'Tempo registrado por ' + who + ': ' + mmss(last.ms || 0);
       case 'clearResult': return 'Tempo apagado por ' + who;
+      case 'score': return 'Pontos lançados por ' + who;
+      case 'clearScores': return 'Pontos apagados por ' + who;
       case 'alert': return '';
       default: return 'Atualizado por ' + who;
     }
@@ -1936,8 +2332,10 @@
 
   // --------------------------------------------------------------- input
 
+  function controlsView() { return prefs.view === 'apres' || prefs.view === 'pontos'; }
+
   function mainPress() {
-    if (PLAN && prefs.view === 'apres') agendaMainPress();
+    if (PLAN && controlsView()) agendaMainPress();
     else dispatch({ type: mainAction, target: state.mode });
   }
 
@@ -2156,7 +2554,7 @@
       case ' ':
       case 'Spacebar': mainPress(); break;
       case 'r':
-        if (PLAN && prefs.view === 'apres') agendaReset();
+        if (PLAN && controlsView()) agendaReset();
         else dispatch({ type: 'reset', target: state.mode });
         break;
       case 'p': if (agendaNow().item) dispatch({ type: 'finish' }); break;
