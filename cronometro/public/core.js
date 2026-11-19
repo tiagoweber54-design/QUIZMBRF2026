@@ -25,6 +25,8 @@
   var ID_PATTERN = /^[a-z0-9-]{1,24}$/; // keep in step with firebase-rules.json
   // What the operator can put on the big screen by hand (see apply 'screen').
   var SCREEN_PATTERN = /^(logo|timer|parodia(:[a-z0-9-]{1,24})?|rank:[a-z0-9-]{1,24})$/;
+  var TEAM_IDS = ['laranja', 'verde', 'amarelo', 'azul']; // gincana teams (keep in step with firebase-rules.json)
+  var MAX_SCORE = 999;
   var WARN_AT = 3 * MINUTE;   // the clock turns yellow
   var DANGER_AT = 30 * SECOND; // ...and red
 
@@ -47,7 +49,7 @@
       // hand (screen; null = decide by itself, see screenOf), which automatic messages the
       // presentation already got (sent.half / sent.last) and what was registered for each one
       // (results[id] = { used, allowed, points, at, by }, all times in ms).
-      agenda: { current: null, screen: null, sent: {}, results: {} },
+      agenda: { current: null, screen: null, sent: {}, results: {}, scores: {} },
       last: null // last change: { type, target, ms, by: { id, name }, at }
     };
   }
@@ -191,6 +193,17 @@
       };
     });
 
+    var sc = ag.scores && typeof ag.scores === 'object' ? ag.scores : {};
+    Object.keys(sc).slice(0, MAX_RESULTS).forEach(function (id) {
+      var row = sc[id];
+      if (!ID_PATTERN.test(id) || !row || typeof row !== 'object') return;
+      var clean = {};
+      TEAM_IDS.forEach(function (team) {
+        if (isNum(row[team]) && row[team] >= 0) clean[team] = Math.min(Math.round(row[team]), MAX_SCORE);
+      });
+      if (Object.keys(clean).length) s.agenda.scores[id] = clean;
+    });
+
     var l = raw.last;
     if (l && typeof l === 'object' && typeof l.type === 'string') {
       s.last = {
@@ -231,8 +244,9 @@
   function apply(state, cmd, now, by) {
     if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return state;
     var next = clone(state);
-    if (!next.agenda) next.agenda = { current: null, screen: null, sent: {}, results: {} };
+    if (!next.agenda) next.agenda = { current: null, screen: null, sent: {}, results: {}, scores: {} };
     if (!next.agenda.sent) next.agenda.sent = {};
+    if (!next.agenda.scores) next.agenda.scores = {};
     var t = next.timer;
     var w = next.stopwatch;
     var target = cmd.target === 'timer' || cmd.target === 'stopwatch' ? cmd.target : next.mode;
@@ -385,6 +399,39 @@
           changed = true;
         } else if (typeof cmd.id === 'string' && next.agenda.results[cmd.id]) {
           delete next.agenda.results[cmd.id];
+          changed = true;
+        }
+        target = 'timer';
+        break;
+
+      case 'score':
+        // gincana: the points one team got in one game (value null/'' takes it back)
+        if (typeof cmd.game !== 'string' || !ID_PATTERN.test(cmd.game) || TEAM_IDS.indexOf(cmd.team) < 0) break;
+        var row = next.agenda.scores[cmd.game] || {};
+        if (cmd.value === null || cmd.value === '' || cmd.value === undefined) {
+          if (!(cmd.team in row)) break;
+          delete row[cmd.team];
+        } else {
+          value = Math.round(Number(cmd.value));
+          if (!isFinite(value) || value < 0) break;
+          value = Math.min(value, MAX_SCORE);
+          if (row[cmd.team] === value) break;
+          if (!next.agenda.scores[cmd.game] && Object.keys(next.agenda.scores).length >= MAX_RESULTS) break;
+          row[cmd.team] = value;
+        }
+        if (Object.keys(row).length) next.agenda.scores[cmd.game] = row;
+        else delete next.agenda.scores[cmd.game];
+        target = 'timer';
+        changed = true;
+        break;
+
+      case 'clearScores':
+        if (cmd.id === '*') {
+          if (!Object.keys(next.agenda.scores).length) break;
+          next.agenda.scores = {};
+          changed = true;
+        } else if (typeof cmd.id === 'string' && next.agenda.scores[cmd.id]) {
+          delete next.agenda.scores[cmd.id];
           changed = true;
         }
         target = 'timer';
@@ -577,6 +624,8 @@
     PENALTY_MS: PENALTY_MS,
     ALERT_SHOW_MS: ALERT_SHOW_MS,
     ID_PATTERN: ID_PATTERN,
+    TEAM_IDS: TEAM_IDS,
+    MAX_SCORE: MAX_SCORE,
     penaltyPoints: penaltyPoints,
     isRegistered: isRegistered,
     screenOf: screenOf,

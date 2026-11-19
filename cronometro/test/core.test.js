@@ -389,7 +389,7 @@ test('results survive a trip through the database', () => {
   assert.deepEqual(back.agenda.results.p07, s.agenda.results.p07);
   // an older state without any agenda still works
   const old = core.normalize({ rev: 3, timer: { base: 60000, duration: 60000, elapsed: 0 } });
-  assert.deepEqual(old.agenda, { current: null, screen: null, sent: {}, results: {} });
+  assert.deepEqual(old.agenda, { current: null, screen: null, sent: {}, results: {}, scores: {} });
   // junk is dropped
   const junk = core.normalize({ agenda: { current: 'NOT OK!', results: { 'bad id': { used: 1, allowed: 1 }, p01: 'x', p02: { used: 5000, allowed: 'x' }, p03: { used: 5000, allowed: 60000, points: -3 } } } });
   assert.equal(junk.agenda.current, null);
@@ -542,4 +542,26 @@ test('adjusting or switching an idle free clock shows it on the big screen', () 
   // with a presentation picked, the call screen is not hidden by these
   const picked = core.apply(idle, { type: 'select', id: 'p01', ms: 480000 }, T0, me);
   assert.equal(core.screenOf(core.apply(picked, { type: 'adjust', ms: 10000 }, T0, me)).name, 'call');
+});
+
+test('gincana: points per team and game', () => {
+  let s = core.initialState();
+  s = core.apply(s, { type: 'score', game: 'g1', team: 'laranja', value: 15 }, T0, me);
+  s = core.apply(s, { type: 'score', game: 'g1', team: 'verde', value: 20 }, T0, me);
+  assert.deepEqual(s.agenda.scores, { g1: { laranja: 15, verde: 20 } });
+  assert.equal(core.apply(s, { type: 'score', game: 'g1', team: 'verde', value: 20 }, T0, me), s, 'same value changes nothing');
+  for (const bad of [{ game: 'G 1', team: 'verde', value: 1 }, { game: 'g1', team: 'roxo', value: 1 }, { game: 'g1', team: 'azul', value: -3 }, { game: 'g1', team: 'azul', value: 'abc' }]) {
+    assert.equal(core.apply(s, Object.assign({ type: 'score' }, bad), T0, me), s, JSON.stringify(bad));
+  }
+  assert.equal(core.apply(s, { type: 'score', game: 'g1', team: 'azul', value: 5000 }, T0, me).agenda.scores.g1.azul, 999, 'capped');
+  s = core.apply(s, { type: 'score', game: 'g1', team: 'laranja', value: null }, T0, me);
+  assert.deepEqual(s.agenda.scores, { g1: { verde: 20 } });
+  s = core.apply(s, { type: 'score', game: 'g1', team: 'verde', value: '' }, T0, me);
+  assert.deepEqual(s.agenda.scores, {}, 'an emptied game is forgotten');
+  s = core.apply(core.apply(s, { type: 'score', game: 'g2', team: 'azul', value: 10 }, T0, me), { type: 'score', game: 'g3', team: 'azul', value: 30 }, T0, me);
+  assert.equal(core.apply(s, { type: 'clearScores', id: 'g2' }, T0, me).agenda.scores.g2, undefined);
+  assert.deepEqual(core.apply(s, { type: 'clearScores', id: '*' }, T0, me).agenda.scores, {});
+  // survives a round trip and ignores junk
+  assert.deepEqual(core.normalize(JSON.parse(JSON.stringify(s))).agenda.scores, { g2: { azul: 10 }, g3: { azul: 30 } });
+  assert.deepEqual(core.normalize({ agenda: { scores: { g1: { roxo: 3, verde: -1, azul: 4.6 }, 'BAD ID': { azul: 1 } } } }).agenda.scores, { g1: { azul: 5 } });
 });

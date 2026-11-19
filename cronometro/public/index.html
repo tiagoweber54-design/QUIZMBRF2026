@@ -123,14 +123,16 @@
   </main>
 
   <section id="controls" class="controls" aria-label="Controles">
+    <div id="eventBar" class="chips event-bar" role="group" aria-label="Evento" hidden></div>
     <div id="tabs" class="tabs" role="tablist" aria-label="Telas de controle">
-      <button type="button" class="tab" role="tab" data-view="apres">Apresentações</button>
+      <button type="button" id="tabApres" class="tab" role="tab" data-view="apres">Apresentações</button>
+      <button type="button" id="tabPontos" class="tab" role="tab" data-view="pontos" hidden>Pontos</button>
       <button type="button" class="tab" role="tab" data-view="tempos">Tempos <span id="doneCount" class="pill"></span></button>
       <button type="button" class="tab" role="tab" data-view="livre">Livre</button>
     </div>
     <div class="controls-inner">
 
-      <div class="panel panel-now" data-views="apres">
+      <div class="panel panel-now" data-views="apres pontos">
         <div id="nowEmpty" class="now-empty">Escolha uma apresentação na lista abaixo.</div>
         <div id="nowInfo" hidden>
           <div class="now-head"><span id="nowCat" class="cat-badge"></span><span id="nowLimit" class="muted small"></span></div>
@@ -158,7 +160,24 @@
         </div>
       </div>
 
-      <div class="panel panel-screen" data-views="apres tempos">
+      <div class="panel panel-pontos" data-views="pontos">
+        <h2 class="panel-title">Pontos da brincadeira</h2>
+        <div id="gamePicker" class="game-picker" role="group" aria-label="Escolher a brincadeira"></div>
+        <div id="scoreCard" class="score-card"></div>
+        <p class="muted small">Os pontos ficam salvos na hora e <strong>não aparecem no tablet</strong> até você tocar em “Mostrar o placar”.</p>
+      </div>
+
+      <div class="panel panel-placar" data-views="pontos">
+        <h2 class="panel-title">Classificação</h2>
+        <div id="scoreMatrix" class="score-matrix"></div>
+        <p id="scoreSum" class="muted small"></p>
+        <div class="row-between wrap">
+          <button type="button" id="scoreShowBtn" class="btn btn-small btn-accent">Mostrar o placar no tablet</button>
+          <button type="button" id="scoreClearBtn" class="btn btn-small btn-quiet danger">Limpar todos os pontos</button>
+        </div>
+      </div>
+
+      <div class="panel panel-screen" data-views="apres tempos pontos">
         <h2 class="panel-title">No tablet agora: <span id="scrNow">—</span></h2>
         <div id="scrPicker" class="chips scr-picker" role="group" aria-label="Escolher o que aparece na tela grande">
           <button type="button" class="chip" data-screen="">Automática</button>
@@ -170,13 +189,13 @@
       </div>
 
       <div class="panel panel-agenda" data-views="apres">
-        <h2 class="panel-title">Apresentações, na ordem do seminário</h2>
+        <h2 id="agTitle" class="panel-title">Apresentações, na ordem do seminário</h2>
         <div id="agFilter" class="chips cat-filter" role="group" aria-label="Filtrar por categoria"></div>
         <ol id="agList" class="ag-list"></ol>
       </div>
 
       <div class="panel panel-results" data-views="tempos">
-        <h2 class="panel-title">Tempos registrados</h2>
+        <h2 id="resTitle" class="panel-title">Tempos registrados</h2>
         <div id="resFilter" class="chips cat-filter" role="group" aria-label="Filtrar por categoria"></div>
         <p id="resSummary" class="res-summary"></p>
         <ol id="resList" class="res-list"></ol>
@@ -389,6 +408,7 @@
 <script src="firebase-config.js"></script>
 <script src="cloud.js"></script>
 <script src="programacao.js"></script>
+<script src="gincana.js"></script>
 <script src="vendor/qrcode.js"></script>
 <script src="app.js"></script>
 </body>

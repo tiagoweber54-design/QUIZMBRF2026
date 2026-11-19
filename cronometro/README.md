@@ -86,6 +86,16 @@ O tempo fica guardado num banco de dados gratuito do **Firebase** (Google). O si
               "last": { ".validate": "newData.isBoolean()" },
               "$other": { ".validate": false }
             },
+            "scores": {
+              "$id": {
+                ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/)",
+                "laranja": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "verde": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "amarelo": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "azul": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 999" },
+                "$other": { ".validate": false }
+              }
+            },
             "results": {
               "$id": {
                 ".validate": "$id.matches(/^[a-z0-9-]{1,24}$/) && newData.hasChildren(['used', 'allowed', 'points'])",
@@ -248,6 +258,25 @@ Os tempos ficam guardados na sala (no Firebase, ou no servidor local). Qualquer 
 **A aba Livre** é o cronômetro/temporizador comum, sem programação. Escolher um tempo livre tira o nome da apresentação das telas.
 
 > **Se você já tinha colado as regras do Firebase antes desta versão:** cole de novo a versão nova (seção 1.4, ou o arquivo `regras-firebase.txt`) e clique em **Publicar**. Sem isso, o Firebase recusa o registro dos tempos e as mensagens automáticas.
+
+## Gincana: Reunião de Líderes 19/11/2026
+
+No alto dos controles há a barra **Evento**: **Seminário**, **Líderes 19/11 · Plano Sol** e **Líderes 19/11 · Plano Chuva**. Cada aparelho escolhe o seu e lembra da escolha. O tablet não precisa escolher nada: ele mostra o que o operador mandar.
+
+**As 9 brincadeiras** (arquivo `public/gincana.js`, com os tempos e pontos da folha oficial): Desfile 10 min, Grito de Guerra 5, Dança das Cadeiras 12, Mistura de Calçados 12, Balão no Pé 12, Dança da Laranja 12, Pênalti Trave Móvel 15, Prego no Toco 12 e Balão com Água 15 (Plano Sol). No Plano Chuva entra o Jogo da Mímica (15 min) no lugar do Balão com Água, e todas as provas depois do Salão são no Vermelhinho. Os horários são previstos (13:30 começa, uns 15 min de deslocamento no meio); quem manda é o cronômetro.
+
+**Cronômetro:** igual ao do seminário. Toque na brincadeira: o tablet mostra o nome grande, a regra, o tempo e quanto vale, com a bordinha na cor do local (roxo Salão, vermelho Vermelhinho, azul-petróleo Campo). **Iniciar**, **Pausar**, **Parar** (só o Parar registra o tempo). Aparecem os avisos de metade do tempo e de 1 minuto, e o relógio fica amarelo com 3 min e vermelho com 30 s. **Na gincana não há perda de ponto por estourar o tempo**: o tempo só fica registrado.
+
+**Aba Pontos (celular ou tablet):**
+1. Toque no número da brincadeira (a que está no relógio já vem escolhida; a bolinha laranja marca ela).
+2. Para cada equipe (Laranja, Verde, Amarelo, Azul): **+** e **−** somam e tiram de uma vez o valor de um gol, uma resposta, etc.; **Máx** dá a pontuação cheia da brincadeira para quem ganhou; ou digite o número direto.
+3. A **Classificação** soma tudo e ordena. Em caso de empate, vale quem tiver mais 1º lugares nas provas; se persistir, aparece o aviso de desempate relâmpago.
+
+**O que aparece no tablet é decisão sua.** Lançar pontos **não** muda o tablet. Para mostrar, use **Mostrar o placar no tablet** (e toque de novo para tirar) ou, em **No tablet agora**, **Placar**, **Tempos das provas** e **Logo MBRF**. Enquanto isso você pode navegar por qualquer aba e lançar notas à vontade.
+
+**Aba Tempos** mostra o tempo de cada brincadeira, e **Copiar para Excel** / **Baixar CSV** levam o tempo de cada prova mais os pontos das 4 equipes e o total.
+
+> Se você já tinha colado as regras do Firebase, **cole de novo** (arquivo `regras-firebase.txt`) e clique em **Publicar**. Sem isso os pontos não são gravados.
 
 ## Problemas comuns (pela internet)
 
